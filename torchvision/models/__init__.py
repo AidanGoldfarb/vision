@@ -14,6 +14,7 @@ from .vgg import *
 from .vision_transformer import *
 from .swin_transformer import *
 from .maxvit import *
+from .myresnet import *
 from . import detection, optical_flow, quantization, segmentation, video
 
 # The Weights and WeightsEnum are developer-facing utils that we make public for
