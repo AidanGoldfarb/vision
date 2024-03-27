@@ -14,7 +14,7 @@ from ._meta import _IMAGENET_CATEGORIES
 from ._utils import _ovewrite_named_param, handle_legacy_interface
 
 
-__all__ = ["SqueezeNet", "SqueezeNet1_0_Weights", "SqueezeNet1_1_Weights", "squeezenet1_0", "squeezenet1_1"]
+__all__ = ["mySqueezeNet", "mySqueezeNet1_0_Weights", "mySqueezeNet1_1_Weights", "mysqueezenet1_0", "mysqueezenet1_1"]
 
 
 class Fire(nn.Module):
@@ -35,7 +35,7 @@ class Fire(nn.Module):
         )
 
 
-class SqueezeNet(nn.Module):
+class mySqueezeNet(nn.Module):
     def __init__(self, version: str = "1_0", num_classes: int = 1000, dropout: float = 0.5) -> None:
         super().__init__()
         _log_api_usage_once(self)
@@ -58,7 +58,7 @@ class SqueezeNet(nn.Module):
             )
         elif version == "1_1":
             self.features = nn.Sequential(
-                nn.Conv2d(3, 64, kernel_size=3, stride=2),
+                torch.compile(nn.Conv2d(3, 64, kernel_size=3, stride=2)),
                 nn.ReLU(inplace=True),
                 nn.MaxPool2d(kernel_size=3, stride=2, ceil_mode=True),
                 Fire(64, 16, 64, 64),
@@ -73,10 +73,10 @@ class SqueezeNet(nn.Module):
                 Fire(512, 64, 256, 256),
             )
         else:
-            # FIXME: Is this needed? SqueezeNet should only be called from the
-            # FIXME: squeezenet1_x() functions
+            # FIXME: Is this needed? mySqueezeNet should only be called from the
+            # FIXME: mysqueezenet1_x() functions
             # FIXME: This checking is not done for the other models
-            raise ValueError(f"Unsupported SqueezeNet version {version}: 1_0 or 1_1 expected")
+            raise ValueError(f"Unsupported mySqueezeNet version {version}: 1_0 or 1_1 expected")
 
         # Final convolution is initialized differently from the rest
         final_conv = nn.Conv2d(512, self.num_classes, kernel_size=1)
@@ -117,16 +117,16 @@ class SqueezeNet(nn.Module):
         return x
 
 
-def _squeezenet(
+def _mysqueezenet(
     version: str,
     weights: Optional[WeightsEnum],
     progress: bool,
     **kwargs: Any,
-) -> SqueezeNet:
+) -> mySqueezeNet:
     if weights is not None:
         _ovewrite_named_param(kwargs, "num_classes", len(weights.meta["categories"]))
 
-    model = SqueezeNet(version, **kwargs)
+    model = mySqueezeNet(version, **kwargs)
 
     if weights is not None:
         model.load_state_dict(weights.get_state_dict(progress=progress, check_hash=True))
@@ -141,7 +141,7 @@ _COMMON_META = {
 }
 
 
-class SqueezeNet1_0_Weights(WeightsEnum):
+class mySqueezeNet1_0_Weights(WeightsEnum):
     IMAGENET1K_V1 = Weights(
         url="https://download.pytorch.org/models/squeezenet1_0-b66bff10.pth",
         transforms=partial(ImageClassification, crop_size=224),
@@ -162,7 +162,7 @@ class SqueezeNet1_0_Weights(WeightsEnum):
     DEFAULT = IMAGENET1K_V1
 
 
-class SqueezeNet1_1_Weights(WeightsEnum):
+class mySqueezeNet1_1_Weights(WeightsEnum):
     IMAGENET1K_V1 = Weights(
         url="https://download.pytorch.org/models/squeezenet1_1-b8a52dc0.pth",
         transforms=partial(ImageClassification, crop_size=224),
@@ -184,60 +184,60 @@ class SqueezeNet1_1_Weights(WeightsEnum):
 
 
 @register_model()
-@handle_legacy_interface(weights=("pretrained", SqueezeNet1_0_Weights.IMAGENET1K_V1))
-def squeezenet1_0(
-    *, weights: Optional[SqueezeNet1_0_Weights] = None, progress: bool = True, **kwargs: Any
-) -> SqueezeNet:
-    """SqueezeNet model architecture from the `SqueezeNet: AlexNet-level
+@handle_legacy_interface(weights=("pretrained", mySqueezeNet1_0_Weights.IMAGENET1K_V1))
+def mysqueezenet1_0(
+    *, weights: Optional[mySqueezeNet1_0_Weights] = None, progress: bool = True, **kwargs: Any
+) -> mySqueezeNet:
+    """mySqueezeNet model architecture from the `mySqueezeNet: AlexNet-level
     accuracy with 50x fewer parameters and <0.5MB model size
     <https://arxiv.org/abs/1602.07360>`_ paper.
 
     Args:
-        weights (:class:`~torchvision.models.SqueezeNet1_0_Weights`, optional): The
+        weights (:class:`~torchvision.models.mySqueezeNet1_0_Weights`, optional): The
             pretrained weights to use. See
-            :class:`~torchvision.models.SqueezeNet1_0_Weights` below for
+            :class:`~torchvision.models.mySqueezeNet1_0_Weights` below for
             more details, and possible values. By default, no pre-trained
             weights are used.
         progress (bool, optional): If True, displays a progress bar of the
             download to stderr. Default is True.
-        **kwargs: parameters passed to the ``torchvision.models.squeezenet.SqueezeNet``
+        **kwargs: parameters passed to the ``torchvision.models.mysqueezenet.mySqueezeNet``
             base class. Please refer to the `source code
             <https://github.com/pytorch/vision/blob/main/torchvision/models/squeezenet.py>`_
             for more details about this class.
 
-    .. autoclass:: torchvision.models.SqueezeNet1_0_Weights
+    .. autoclass:: torchvision.models.mySqueezeNet1_0_Weights
         :members:
     """
-    weights = SqueezeNet1_0_Weights.verify(weights)
-    return _squeezenet("1_0", weights, progress, **kwargs)
+    weights = mySqueezeNet1_0_Weights.verify(weights)
+    return _mysqueezenet("1_0", weights, progress, **kwargs)
 
 
 @register_model()
-@handle_legacy_interface(weights=("pretrained", SqueezeNet1_1_Weights.IMAGENET1K_V1))
-def squeezenet1_1(
-    *, weights: Optional[SqueezeNet1_1_Weights] = None, progress: bool = True, **kwargs: Any
-) -> SqueezeNet:
-    """SqueezeNet 1.1 model from the `official SqueezeNet repo
+@handle_legacy_interface(weights=("pretrained", mySqueezeNet1_1_Weights.IMAGENET1K_V1))
+def mysqueezenet1_1(
+    *, weights: Optional[mySqueezeNet1_1_Weights] = None, progress: bool = True, **kwargs: Any
+) -> mySqueezeNet:
+    """mySqueezeNet 1.1 model from the `official mySqueezeNet repo
     <https://github.com/DeepScale/SqueezeNet/tree/master/SqueezeNet_v1.1>`_.
 
-    SqueezeNet 1.1 has 2.4x less computation and slightly fewer parameters
-    than SqueezeNet 1.0, without sacrificing accuracy.
+    mySqueezeNet 1.1 has 2.4x less computation and slightly fewer parameters
+    than mySqueezeNet 1.0, without sacrificing accuracy.
 
     Args:
-        weights (:class:`~torchvision.models.SqueezeNet1_1_Weights`, optional): The
+        weights (:class:`~torchvision.models.mySqueezeNet1_1_Weights`, optional): The
             pretrained weights to use. See
-            :class:`~torchvision.models.SqueezeNet1_1_Weights` below for
+            :class:`~torchvision.models.mySqueezeNet1_1_Weights` below for
             more details, and possible values. By default, no pre-trained
             weights are used.
         progress (bool, optional): If True, displays a progress bar of the
             download to stderr. Default is True.
-        **kwargs: parameters passed to the ``torchvision.models.squeezenet.SqueezeNet``
+        **kwargs: parameters passed to the ``torchvision.models.mysqueezenet.mySqueezeNet``
             base class. Please refer to the `source code
             <https://github.com/pytorch/vision/blob/main/torchvision/models/squeezenet.py>`_
             for more details about this class.
 
-    .. autoclass:: torchvision.models.SqueezeNet1_1_Weights
+    .. autoclass:: torchvision.models.mySqueezeNet1_1_Weights
         :members:
     """
-    weights = SqueezeNet1_1_Weights.verify(weights)
-    return _squeezenet("1_1", weights, progress, **kwargs)
+    weights = mySqueezeNet1_1_Weights.verify(weights)
+    return _mysqueezenet("1_1", weights, progress, **kwargs)

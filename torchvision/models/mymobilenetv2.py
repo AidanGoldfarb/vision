@@ -14,7 +14,7 @@ from ._meta import _IMAGENET_CATEGORIES
 from ._utils import _make_divisible, _ovewrite_named_param, handle_legacy_interface
 
 
-__all__ = ["MobileNetV2", "MobileNet_V2_Weights", "mobilenet_v2"]
+__all__ = ["myMobileNetV2", "myMobileNet_V2_Weights", "mymobilenet_v2"]
 
 
 # necessary for backwards compatibility
@@ -66,7 +66,7 @@ class InvertedResidual(nn.Module):
             return self.conv(x)
 
 
-class MobileNetV2(nn.Module):
+class myMobileNetV2(nn.Module):
     def __init__(
         self,
         num_classes: int = 1000,
@@ -165,6 +165,7 @@ class MobileNetV2(nn.Module):
     def _forward_impl(self, x: Tensor) -> Tensor:
         # This exists since TorchScript doesn't support inheritance, so the superclass method
         # (this one) needs to have a name other than `forward` that can be accessed in a subclass
+        
         # x = self.features(x)
         # # Cannot use "squeeze" as batch-size can be 1
         # x = nn.functional.adaptive_avg_pool2d(x, (1, 1))
@@ -207,7 +208,7 @@ _COMMON_META = {
 }
 
 
-class MobileNet_V2_Weights(WeightsEnum):
+class myMobileNet_V2_Weights(WeightsEnum):
     IMAGENET1K_V1 = Weights(
         url="https://download.pytorch.org/models/mobilenet_v2-b0353104.pth",
         transforms=partial(ImageClassification, crop_size=224),
@@ -250,35 +251,35 @@ class MobileNet_V2_Weights(WeightsEnum):
 
 
 @register_model()
-@handle_legacy_interface(weights=("pretrained", MobileNet_V2_Weights.IMAGENET1K_V1))
-def mobilenet_v2(
-    *, weights: Optional[MobileNet_V2_Weights] = None, progress: bool = True, **kwargs: Any
-) -> MobileNetV2:
-    """MobileNetV2 architecture from the `MobileNetV2: Inverted Residuals and Linear
+@handle_legacy_interface(weights=("pretrained", myMobileNet_V2_Weights.IMAGENET1K_V1))
+def mymobilenet_v2(
+    *, weights: Optional[myMobileNet_V2_Weights] = None, progress: bool = True, **kwargs: Any
+) -> myMobileNetV2:
+    """myMobileNetV2 architecture from the `myMobileNetV2: Inverted Residuals and Linear
     Bottlenecks <https://arxiv.org/abs/1801.04381>`_ paper.
 
     Args:
-        weights (:class:`~torchvision.models.MobileNet_V2_Weights`, optional): The
+        weights (:class:`~torchvision.models.myMobileNet_V2_Weights`, optional): The
             pretrained weights to use. See
-            :class:`~torchvision.models.MobileNet_V2_Weights` below for
+            :class:`~torchvision.models.myMobileNet_V2_Weights` below for
             more details, and possible values. By default, no pre-trained
             weights are used.
         progress (bool, optional): If True, displays a progress bar of the
             download to stderr. Default is True.
-        **kwargs: parameters passed to the ``torchvision.models.mobilenetv2.MobileNetV2``
+        **kwargs: parameters passed to the ``torchvision.models.mobilenetv2.myMobileNetV2``
             base class. Please refer to the `source code
             <https://github.com/pytorch/vision/blob/main/torchvision/models/mobilenetv2.py>`_
             for more details about this class.
 
-    .. autoclass:: torchvision.models.MobileNet_V2_Weights
+    .. autoclass:: torchvision.models.myMobileNet_V2_Weights
         :members:
     """
-    weights = MobileNet_V2_Weights.verify(weights)
+    weights = myMobileNet_V2_Weights.verify(weights)
 
     if weights is not None:
         _ovewrite_named_param(kwargs, "num_classes", len(weights.meta["categories"]))
 
-    model = MobileNetV2(**kwargs)
+    model = myMobileNetV2(**kwargs)
 
     if weights is not None:
         model.load_state_dict(weights.get_state_dict(progress=progress, check_hash=True))

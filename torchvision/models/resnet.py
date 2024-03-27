@@ -5,6 +5,8 @@ import torch
 import torch.nn as nn
 from torch import Tensor
 
+import time
+
 from ..transforms._presets import ImageClassification
 from ..utils import _log_api_usage_once
 from ._api import register_model, Weights, WeightsEnum
@@ -265,20 +267,63 @@ class ResNet(nn.Module):
 
     def _forward_impl(self, x: Tensor) -> Tensor:
         # See note [TorchScript super()]
+        layer_times = []
+        # See note [TorchScript super()]
+        
+
+        st = time.perf_counter_ns()
         x = self.conv1(x)
+        et = time.perf_counter_ns()
+        layer_times.append(et-st)
+
+        st = time.perf_counter_ns()
         x = self.bn1(x)
+        et = time.perf_counter_ns()
+        layer_times.append(et-st)
+
+        st = time.perf_counter_ns()
         x = self.relu(x)
+        et = time.perf_counter_ns()
+        layer_times.append(et-st)
+
+        st = time.perf_counter_ns()
         x = self.maxpool(x)
+        et = time.perf_counter_ns()
+        layer_times.append(et-st)
 
+        st = time.perf_counter_ns()
         x = self.layer1(x)
+        et = time.perf_counter_ns()
+        layer_times.append(et-st)
+        
+        st = time.perf_counter_ns()
         x = self.layer2(x)
+        et = time.perf_counter_ns()
+        layer_times.append(et-st)
+        
+        st = time.perf_counter_ns()
         x = self.layer3(x)
+        et = time.perf_counter_ns()
+        layer_times.append(et-st)
+
+        st = time.perf_counter_ns()
         x = self.layer4(x)
+        et = time.perf_counter_ns()
+        layer_times.append(et-st)
 
+        st = time.perf_counter_ns()
         x = self.avgpool(x)
-        x = torch.flatten(x, 1)
-        x = self.fc(x)
+        et = time.perf_counter_ns()
+        layer_times.append(et-st)
 
+        x = torch.flatten(x, 1)
+        
+        st = time.perf_counter_ns()
+        x = self.fc(x)
+        et = time.perf_counter_ns()
+        layer_times.append(et-st)
+
+        print(layer_times)
         return x
 
     def forward(self, x: Tensor) -> Tensor:

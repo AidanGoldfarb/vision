@@ -17,18 +17,18 @@ from ._meta import _IMAGENET_CATEGORIES
 from ._utils import _ovewrite_named_param, handle_legacy_interface
 
 
-__all__ = ["GoogLeNet", "GoogLeNetOutputs", "_GoogLeNetOutputs", "GoogLeNet_Weights", "googlenet"]
+__all__ = ["myGoogLeNet", "myGoogLeNetOutputs", "_myGoogLeNetOutputs", "myGoogLeNet_Weights", "mygooglenet"]
 
 
-GoogLeNetOutputs = namedtuple("GoogLeNetOutputs", ["logits", "aux_logits2", "aux_logits1"])
-GoogLeNetOutputs.__annotations__ = {"logits": Tensor, "aux_logits2": Optional[Tensor], "aux_logits1": Optional[Tensor]}
+myGoogLeNetOutputs = namedtuple("myGoogLeNetOutputs", ["logits", "aux_logits2", "aux_logits1"])
+myGoogLeNetOutputs.__annotations__ = {"logits": Tensor, "aux_logits2": Optional[Tensor], "aux_logits1": Optional[Tensor]}
 
 # Script annotations failed with _GoogleNetOutputs = namedtuple ...
-# _GoogLeNetOutputs set here for backwards compat
-_GoogLeNetOutputs = GoogLeNetOutputs
+# _myGoogLeNetOutputs set here for backwards compat
+_myGoogLeNetOutputs = myGoogLeNetOutputs
 
 
-class GoogLeNet(nn.Module):
+class myGoogLeNet(nn.Module):
     __constants__ = ["aux_logits", "transform_input"]
 
     def __init__(
@@ -63,6 +63,7 @@ class GoogLeNet(nn.Module):
         self.transform_input = transform_input
 
         self.conv1 = conv_block(3, 64, kernel_size=7, stride=2, padding=3)
+        self.conv1fun = torch.compile(self.conv1)
         self.maxpool1 = nn.MaxPool2d(3, stride=2, ceil_mode=True)
         self.conv2 = conv_block(64, 64, kernel_size=1)
         self.conv3 = conv_block(64, 192, kernel_size=3, padding=1)
@@ -112,6 +113,7 @@ class GoogLeNet(nn.Module):
     def _forward(self, x: Tensor) -> Tuple[Tensor, Optional[Tensor], Optional[Tensor]]:
         # # N x 3 x 224 x 224
         # x = self.conv1(x)
+        # #x = self.conv1fun(x)
         # # N x 64 x 112 x 112
         # x = self.maxpool1(x)
         # # N x 64 x 56 x 56
@@ -161,8 +163,7 @@ class GoogLeNet(nn.Module):
         # # N x 1024
         # x = self.dropout(x)
         # x = self.fc(x)
-        # N x 1000 (num_classes)
-
+        # # N x 1000 (num_classes)
         times = []
 
         st = time.perf_counter_ns()
@@ -302,20 +303,20 @@ class GoogLeNet(nn.Module):
         return x, aux2, aux1
 
     @torch.jit.unused
-    def eager_outputs(self, x: Tensor, aux2: Tensor, aux1: Optional[Tensor]) -> GoogLeNetOutputs:
+    def eager_outputs(self, x: Tensor, aux2: Tensor, aux1: Optional[Tensor]) -> myGoogLeNetOutputs:
         if self.training and self.aux_logits:
-            return _GoogLeNetOutputs(x, aux2, aux1)
+            return _myGoogLeNetOutputs(x, aux2, aux1)
         else:
             return x  # type: ignore[return-value]
 
-    def forward(self, x: Tensor) -> GoogLeNetOutputs:
+    def forward(self, x: Tensor) -> myGoogLeNetOutputs:
         x = self._transform_input(x)
         x, aux1, aux2 = self._forward(x)
         aux_defined = self.training and self.aux_logits
         if torch.jit.is_scripting():
             if not aux_defined:
                 warnings.warn("Scripted GoogleNet always returns GoogleNetOutputs Tuple")
-            return GoogLeNetOutputs(x, aux2, aux1)
+            return myGoogLeNetOutputs(x, aux2, aux1)
         else:
             return self.eager_outputs(x, aux2, aux1)
 
@@ -414,7 +415,7 @@ class BasicConv2d(nn.Module):
         return F.relu(x, inplace=True)
 
 
-class GoogLeNet_Weights(WeightsEnum):
+class myGoogLeNet_Weights(WeightsEnum):
     IMAGENET1K_V1 = Weights(
         url="https://download.pytorch.org/models/googlenet-1378be20.pth",
         transforms=partial(ImageClassification, crop_size=224),
@@ -438,13 +439,13 @@ class GoogLeNet_Weights(WeightsEnum):
 
 
 @register_model()
-@handle_legacy_interface(weights=("pretrained", GoogLeNet_Weights.IMAGENET1K_V1))
-def googlenet(*, weights: Optional[GoogLeNet_Weights] = None, progress: bool = True, **kwargs: Any) -> GoogLeNet:
-    """GoogLeNet (Inception v1) model architecture from
+@handle_legacy_interface(weights=("pretrained", myGoogLeNet_Weights.IMAGENET1K_V1))
+def mygooglenet(*, weights: Optional[myGoogLeNet_Weights] = None, progress: bool = True, **kwargs: Any) -> myGoogLeNet:
+    """myGoogLeNet (Inception v1) model architecture from
     `Going Deeper with Convolutions <http://arxiv.org/abs/1409.4842>`_.
 
     Args:
-        weights (:class:`~torchvision.models.GoogLeNet_Weights`, optional): The
+        weights (:class:`~torchvision.models.myGoogLeNet_Weights`, optional): The
             pretrained weights for the model. See
             :class:`~torchvision.models.GoogLeNet_Weights` below for
             more details, and possible values. By default, no pre-trained
@@ -458,7 +459,7 @@ def googlenet(*, weights: Optional[GoogLeNet_Weights] = None, progress: bool = T
     .. autoclass:: torchvision.models.GoogLeNet_Weights
         :members:
     """
-    weights = GoogLeNet_Weights.verify(weights)
+    weights = myGoogLeNet_Weights.verify(weights)
 
     original_aux_logits = kwargs.get("aux_logits", False)
     if weights is not None:
@@ -468,7 +469,7 @@ def googlenet(*, weights: Optional[GoogLeNet_Weights] = None, progress: bool = T
         _ovewrite_named_param(kwargs, "init_weights", False)
         _ovewrite_named_param(kwargs, "num_classes", len(weights.meta["categories"]))
 
-    model = GoogLeNet(**kwargs)
+    model = myGoogLeNet(**kwargs)
 
     if weights is not None:
         model.load_state_dict(weights.get_state_dict(progress=progress, check_hash=True))

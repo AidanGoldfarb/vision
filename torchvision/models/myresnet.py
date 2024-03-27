@@ -5,6 +5,8 @@ import torch
 import torch.nn as nn
 from torch import Tensor
 
+import time
+
 from ..transforms._presets import ImageClassification
 from ..utils import _log_api_usage_once
 from ._api import register_model, Weights, WeightsEnum
@@ -195,6 +197,7 @@ class myResNet(nn.Module):
         self.groups = groups
         self.base_width = width_per_group
         self.conv1 = nn.Conv2d(3, self.inplanes, kernel_size=7, stride=2, padding=3, bias=False)
+        self.conv1fun = torch.compile(self.conv1)
         self.bn1 = norm_layer(self.inplanes)
         self.relu = nn.ReLU(inplace=True)
         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
@@ -202,6 +205,12 @@ class myResNet(nn.Module):
         self.layer2 = self._make_layer(block, 128, layers[1], stride=2, dilate=replace_stride_with_dilation[0])
         self.layer3 = self._make_layer(block, 256, layers[2], stride=2, dilate=replace_stride_with_dilation[1])
         self.layer4 = self._make_layer(block, 512, layers[3], stride=2, dilate=replace_stride_with_dilation[2])
+
+        self.layer1comp = torch.compile(self.layer1)
+        self.layer2comp = torch.compile(self.layer2)
+        self.layer3comp = torch.compile(self.layer3)
+        self.layer4comp = torch.compile(self.layer4)
+
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
         self.fc = nn.Linear(512 * block.expansion, num_classes)
 
@@ -263,23 +272,67 @@ class myResNet(nn.Module):
 
         return nn.Sequential(*layers)
 
+    def _conv1(self,x):
+        return self.conv1(x)
+    
     def _forward_impl(self, x: Tensor) -> Tensor:
-        print("forward pass of myresnet")
+        layer_times = []
         # See note [TorchScript super()]
+        
+        #x = self.conv1(x)
+        st = time.perf_counter_ns()
         x = self.conv1(x)
+        et = time.perf_counter_ns()
+        layer_times.append(et-st)
+
+        st = time.perf_counter_ns()
         x = self.bn1(x)
+        et = time.perf_counter_ns()
+        layer_times.append(et-st)
+
+        st = time.perf_counter_ns()
         x = self.relu(x)
+        et = time.perf_counter_ns()
+        layer_times.append(et-st)
+
+        st = time.perf_counter_ns()
         x = self.maxpool(x)
+        et = time.perf_counter_ns()
+        layer_times.append(et-st)
 
-        x = self.layer1(x)
-        x = self.layer2(x)
-        x = self.layer3(x)
-        x = self.layer4(x)
+        st = time.perf_counter_ns()
+        x = self.layer1comp(x)
+        et = time.perf_counter_ns()
+        layer_times.append(et-st)
+        
+        st = time.perf_counter_ns()
+        x = self.layer2comp(x)
+        et = time.perf_counter_ns()
+        layer_times.append(et-st)
+        
+        st = time.perf_counter_ns()
+        x = self.layer3comp(x)
+        et = time.perf_counter_ns()
+        layer_times.append(et-st)
 
+        st = time.perf_counter_ns()
+        x = self.layer4comp(x)
+        et = time.perf_counter_ns()
+        layer_times.append(et-st)
+
+        st = time.perf_counter_ns()
         x = self.avgpool(x)
-        x = torch.flatten(x, 1)
-        x = self.fc(x)
+        et = time.perf_counter_ns()
+        layer_times.append(et-st)
 
+        x = torch.flatten(x, 1)
+        
+        st = time.perf_counter_ns()
+        x = self.fc(x)
+        et = time.perf_counter_ns()
+        layer_times.append(et-st)
+
+        print(layer_times)
         return x
 
     def forward(self, x: Tensor) -> Tensor:
