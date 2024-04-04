@@ -45,6 +45,8 @@ class AlexNet(nn.Module):
             nn.Linear(4096, num_classes),
         )
 
+
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # x = self.features(x)
         # x = self.avgpool(x)
@@ -53,20 +55,25 @@ class AlexNet(nn.Module):
         # return x
         times = []
         
-        st = time.perf_counter_ns()
-        x = self.features(x)
-        et = time.perf_counter_ns()
-        times.append(et-st)
+        for module in self.features:
+            st = time.perf_counter_ns()
+            x = module(x)
+            torch.cuda.synchronize()
+            et = time.perf_counter_ns()
+            times.append(et-st)
 
         st = time.perf_counter_ns()
         x = self.avgpool(x)
+        torch.cuda.synchronize()
         et = time.perf_counter_ns()
         times.append(et-st)
 
         x = torch.flatten(x, 1)
+        torch.cuda.synchronize()
 
         st = time.perf_counter_ns()
         x = self.classifier(x)
+        torch.cuda.synchronize()
         et = time.perf_counter_ns()
         times.append(et-st)
 

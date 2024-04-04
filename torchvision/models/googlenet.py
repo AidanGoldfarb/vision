@@ -110,6 +110,7 @@ class GoogLeNet(nn.Module):
         return x
 
     def _forward(self, x: Tensor) -> Tuple[Tensor, Optional[Tensor], Optional[Tensor]]:
+        torch.cuda.synchronize()
         # # N x 3 x 224 x 224
         # x = self.conv1(x)
         # # N x 64 x 112 x 112
@@ -168,6 +169,7 @@ class GoogLeNet(nn.Module):
         st = time.perf_counter_ns()
         # N x 3 x 224 x 224
         x = self.conv1(x)
+        torch.cuda.synchronize()
         et = time.perf_counter_ns()
         times.append(et-st)
 
@@ -176,48 +178,56 @@ class GoogLeNet(nn.Module):
         st = time.perf_counter_ns()
         # N x 64 x 112 x 112
         x = self.maxpool1(x)
+        torch.cuda.synchronize()
         et = time.perf_counter_ns()
         times.append(et-st)
 
         st = time.perf_counter_ns()
         # N x 64 x 56 x 56
         x = self.conv2(x)
+        torch.cuda.synchronize()
         et = time.perf_counter_ns()
         times.append(et-st)
 
         st = time.perf_counter_ns()
         # N x 64 x 56 x 56
         x = self.conv3(x)
+        torch.cuda.synchronize()
         et = time.perf_counter_ns()
         times.append(et-st)
 
         st = time.perf_counter_ns()
         # N x 192 x 56 x 56
         x = self.maxpool2(x)
+        torch.cuda.synchronize()
         et = time.perf_counter_ns()
         times.append(et-st)
 
         st = time.perf_counter_ns()
         # N x 192 x 28 x 28
         x = self.inception3a(x)
+        torch.cuda.synchronize()
         et = time.perf_counter_ns()
         times.append(et-st)
 
         st = time.perf_counter_ns()
         # N x 256 x 28 x 28
         x = self.inception3b(x)
+        torch.cuda.synchronize()
         et = time.perf_counter_ns()
         times.append(et-st)
 
         st = time.perf_counter_ns()
         # N x 480 x 28 x 28
         x = self.maxpool3(x)
+        torch.cuda.synchronize()
         et = time.perf_counter_ns()
         times.append(et-st)
 
         st = time.perf_counter_ns()
         # N x 480 x 14 x 14
         x = self.inception4a(x)
+        torch.cuda.synchronize()
         et = time.perf_counter_ns()
         times.append(et-st)
         
@@ -230,18 +240,21 @@ class GoogLeNet(nn.Module):
 
         st = time.perf_counter_ns()
         x = self.inception4b(x)
+        torch.cuda.synchronize()
         et = time.perf_counter_ns()
         times.append(et-st)
 
         st = time.perf_counter_ns()
         # N x 512 x 14 x 14
         x = self.inception4c(x)
+        torch.cuda.synchronize()
         et = time.perf_counter_ns()
         times.append(et-st)
 
         st = time.perf_counter_ns()
         # N x 512 x 14 x 14
         x = self.inception4d(x)
+        torch.cuda.synchronize()
         et = time.perf_counter_ns()
         times.append(et-st)
 
@@ -253,47 +266,55 @@ class GoogLeNet(nn.Module):
 
         st = time.perf_counter_ns()
         x = self.inception4e(x)
+        torch.cuda.synchronize()
         et = time.perf_counter_ns()
         times.append(et-st)
 
         st = time.perf_counter_ns()
         # N x 832 x 14 x 14
         x = self.maxpool4(x)
+        torch.cuda.synchronize()
         et = time.perf_counter_ns()
         times.append(et-st)
 
         st = time.perf_counter_ns()
         # N x 832 x 7 x 7
         x = self.inception5a(x)
+        torch.cuda.synchronize()
         et = time.perf_counter_ns()
         times.append(et-st)
 
         st = time.perf_counter_ns()
         # N x 832 x 7 x 7
         x = self.inception5b(x)
+        torch.cuda.synchronize()
         et = time.perf_counter_ns()
         times.append(et-st)
 
         st = time.perf_counter_ns()
         # N x 1024 x 7 x 7
         x = self.avgpool(x)
+        torch.cuda.synchronize()
         et = time.perf_counter_ns()
         times.append(et-st)
         
         st = time.perf_counter_ns()
         # N x 1024 x 1 x 1
         x = torch.flatten(x, 1)
+        torch.cuda.synchronize()
         et = time.perf_counter_ns()
         times.append(et-st)
 
         st = time.perf_counter_ns()
         # N x 1024
         x = self.dropout(x)
+        torch.cuda.synchronize()
         et = time.perf_counter_ns()
         times.append(et-st)
 
         st = time.perf_counter_ns()
         x = self.fc(x)
+        torch.cuda.synchronize()
         et = time.perf_counter_ns()
         times.append(et-st)
 

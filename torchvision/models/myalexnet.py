@@ -53,13 +53,16 @@ class myAlexNet(nn.Module):
         # x = self.classifier(x)
         times = []
         
-        st = time.perf_counter_ns()
-        x = self.features(x)
-        et = time.perf_counter_ns()
-        times.append(et-st)
+        for module in self.features:
+            st = time.perf_counter_ns()
+            x = module(x)
+            torch.cuda.synchronize()
+            et = time.perf_counter_ns()
+            times.append(et-st)
 
         st = time.perf_counter_ns()
         x = self.avgpool(x)
+        torch.cuda.synchronize()
         et = time.perf_counter_ns()
         times.append(et-st)
 
@@ -67,6 +70,7 @@ class myAlexNet(nn.Module):
 
         st = time.perf_counter_ns()
         x = self.classifier(x)
+        torch.cuda.synchronize()
         et = time.perf_counter_ns()
         times.append(et-st)
 

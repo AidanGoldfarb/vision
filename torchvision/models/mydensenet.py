@@ -198,8 +198,12 @@ class myDenseNet(nn.Module):
         # Final batch norm
         self.features.add_module("norm5", nn.BatchNorm2d(num_features))
 
-        self.featuresfun = torch.compile(self.features)
-
+        self.featurescomp = nn.Sequential()
+        for i,module in enumerate(self.features):
+            if i in [0,1,2,4,6,10,14]: #lst from god
+                self.featurescomp.add_module("uselessAPI"+str(i+1),torch.compile(module))
+            else:
+                self.featurescomp.add_module("uselessAPI"+str(i+1),module)
         # Linear layer
         self.classifier = nn.Linear(num_features, num_classes)
 
@@ -214,6 +218,7 @@ class myDenseNet(nn.Module):
                 nn.init.constant_(m.bias, 0)
 
     def forward(self, x: Tensor) -> Tensor:
+        torch.cuda.synchronize()
         # features = self.features(x)
         # #features = self.featuresfun(x)
         # out = F.relu(features, inplace=True)
@@ -222,28 +227,35 @@ class myDenseNet(nn.Module):
         # out = self.classifier(out)
         times = []
 
-        st = time.perf_counter_ns()
-        features = self.features(x)
-        et = time.perf_counter_ns()
-        times.append(et-st)
+        for module in self.featurescomp:
+            st = time.perf_counter_ns()
+            x = module(x)
+            torch.cuda.synchronize() 
+            et = time.perf_counter_ns()
+            times.append(et-st)
+        features = x
 
         st = time.perf_counter_ns()
         out = F.relu(features, inplace=True)
+        torch.cuda.synchronize()
         et = time.perf_counter_ns()
         times.append(et-st)
 
         st = time.perf_counter_ns()
         out = F.adaptive_avg_pool2d(out, (1, 1))
+        torch.cuda.synchronize()
         et = time.perf_counter_ns()
         times.append(et-st)
 
         st = time.perf_counter_ns()
         out = torch.flatten(out, 1)
+        torch.cuda.synchronize()
         et = time.perf_counter_ns()
         times.append(et-st)
 
         st = time.perf_counter_ns()
         out = self.classifier(out)
+        torch.cuda.synchronize()
         et = time.perf_counter_ns()
         times.append(et-st)
 

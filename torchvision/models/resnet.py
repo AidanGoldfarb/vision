@@ -266,6 +266,7 @@ class ResNet(nn.Module):
         return nn.Sequential(*layers)
 
     def _forward_impl(self, x: Tensor) -> Tensor:
+        torch.cuda.synchronize()
         # See note [TorchScript super()]
         layer_times = []
         # See note [TorchScript super()]
@@ -273,46 +274,55 @@ class ResNet(nn.Module):
 
         st = time.perf_counter_ns()
         x = self.conv1(x)
+        torch.cuda.synchronize()
         et = time.perf_counter_ns()
         layer_times.append(et-st)
 
         st = time.perf_counter_ns()
         x = self.bn1(x)
+        torch.cuda.synchronize()
         et = time.perf_counter_ns()
         layer_times.append(et-st)
 
         st = time.perf_counter_ns()
         x = self.relu(x)
+        torch.cuda.synchronize()
         et = time.perf_counter_ns()
         layer_times.append(et-st)
 
         st = time.perf_counter_ns()
         x = self.maxpool(x)
+        torch.cuda.synchronize()
         et = time.perf_counter_ns()
         layer_times.append(et-st)
 
         st = time.perf_counter_ns()
         x = self.layer1(x)
+        torch.cuda.synchronize()
         et = time.perf_counter_ns()
         layer_times.append(et-st)
         
         st = time.perf_counter_ns()
         x = self.layer2(x)
+        torch.cuda.synchronize()
         et = time.perf_counter_ns()
         layer_times.append(et-st)
         
         st = time.perf_counter_ns()
         x = self.layer3(x)
+        torch.cuda.synchronize()
         et = time.perf_counter_ns()
         layer_times.append(et-st)
 
         st = time.perf_counter_ns()
         x = self.layer4(x)
+        torch.cuda.synchronize()
         et = time.perf_counter_ns()
         layer_times.append(et-st)
 
         st = time.perf_counter_ns()
         x = self.avgpool(x)
+        torch.cuda.synchronize()
         et = time.perf_counter_ns()
         layer_times.append(et-st)
 
@@ -320,6 +330,7 @@ class ResNet(nn.Module):
         
         st = time.perf_counter_ns()
         x = self.fc(x)
+        torch.cuda.synchronize()
         et = time.perf_counter_ns()
         layer_times.append(et-st)
 

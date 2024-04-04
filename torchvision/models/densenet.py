@@ -212,6 +212,7 @@ class DenseNet(nn.Module):
                 nn.init.constant_(m.bias, 0)
 
     def forward(self, x: Tensor) -> Tensor:
+        torch.cuda.synchronize()
         # features = self.features(x)
         # out = F.relu(features, inplace=True)
         # out = F.adaptive_avg_pool2d(out, (1, 1))
@@ -221,28 +222,39 @@ class DenseNet(nn.Module):
 
         times = []
 
-        st = time.perf_counter_ns()
-        features = self.features(x)
-        et = time.perf_counter_ns()
-        times.append(et-st)
+        # st = time.perf_counter_ns()
+        # features = self.features(x)
+        # et = time.perf_counter_ns()
+        # times.append(et-st)
+        for module in self.features:
+            st = time.perf_counter_ns()
+            x = module(x)
+            torch.cuda.synchronize()
+            et = time.perf_counter_ns()
+            times.append(et-st)
+        features = x
 
         st = time.perf_counter_ns()
         out = F.relu(features, inplace=True)
+        torch.cuda.synchronize()
         et = time.perf_counter_ns()
         times.append(et-st)
 
         st = time.perf_counter_ns()
         out = F.adaptive_avg_pool2d(out, (1, 1))
+        torch.cuda.synchronize()
         et = time.perf_counter_ns()
         times.append(et-st)
 
         st = time.perf_counter_ns()
         out = torch.flatten(out, 1)
+        torch.cuda.synchronize()
         et = time.perf_counter_ns()
         times.append(et-st)
 
         st = time.perf_counter_ns()
         out = self.classifier(out)
+        torch.cuda.synchronize()
         et = time.perf_counter_ns()
         times.append(et-st)
 

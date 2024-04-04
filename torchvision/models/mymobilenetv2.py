@@ -142,6 +142,7 @@ class myMobileNetV2(nn.Module):
         )
         # make it nn.Sequential
         self.features = nn.Sequential(*features)
+        self.featurescomp = torch.compile(self.features)
 
         # building classifier
         self.classifier = nn.Sequential(
@@ -163,6 +164,7 @@ class myMobileNetV2(nn.Module):
                 nn.init.zeros_(m.bias)
 
     def _forward_impl(self, x: Tensor) -> Tensor:
+        torch.cuda.synchronize()
         # This exists since TorchScript doesn't support inheritance, so the superclass method
         # (this one) needs to have a name other than `forward` that can be accessed in a subclass
         
@@ -174,23 +176,28 @@ class myMobileNetV2(nn.Module):
         times = []
 
         st = time.perf_counter_ns()
-        x = self.features(x)
+        #x = self.features(x)
+        x = self.featurescomp(x)
+        torch.cuda.synchronize()
         et = time.perf_counter_ns()
         times.append(et-st)
 
         st = time.perf_counter_ns()
         # Cannot use "squeeze" as batch-size can be 1
         x = nn.functional.adaptive_avg_pool2d(x, (1, 1))
+        torch.cuda.synchronize()
         et = time.perf_counter_ns()
         times.append(et-st)
 
         st = time.perf_counter_ns()
         x = torch.flatten(x, 1)
+        torch.cuda.synchronize()
         et = time.perf_counter_ns()
         times.append(et-st)
 
         st = time.perf_counter_ns()
         x = self.classifier(x)
+        torch.cuda.synchronize()
         et = time.perf_counter_ns()
         times.append(et-st)
         

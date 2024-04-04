@@ -72,6 +72,7 @@ class SqueezeNet(nn.Module):
                 Fire(384, 64, 256, 256),
                 Fire(512, 64, 256, 256),
             )
+
         else:
             # FIXME: Is this needed? SqueezeNet should only be called from the
             # FIXME: squeezenet1_x() functions
@@ -94,25 +95,36 @@ class SqueezeNet(nn.Module):
                     init.constant_(m.bias, 0)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        torch.cuda.synchronize()
         # x = self.features(x)
         # x = self.classifier(x)
         # return torch.flatten(x, 1)
         times = []
 
-        st = time.perf_counter_ns()
-        x = self.features(x)
-        et = time.perf_counter_ns()
-        times.append(et-st)
+        # st = time.perf_counter_ns()
+        # x = self.features(x)
+        # et = time.perf_counter_ns()
+        # times.append(et-st)
+        for module in self.features:
+            st = time.perf_counter_ns()
+            x = module(x)
+            torch.cuda.synchronize()
+            et = time.perf_counter_ns()
+            times.append(et-st)
 
         st = time.perf_counter_ns()
         x = self.classifier(x)
+        torch.cuda.synchronize()
         et = time.perf_counter_ns()
         times.append(et-st)
 
         st = time.perf_counter_ns()
         x = torch.flatten(x,1)
+        torch.cuda.synchronize()
         et = time.perf_counter_ns()
         times.append(et-st)
+
+        print(times)
 
         return x
 
