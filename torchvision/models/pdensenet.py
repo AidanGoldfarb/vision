@@ -18,15 +18,15 @@ from ._meta import _IMAGENET_CATEGORIES
 from ._utils import _ovewrite_named_param, handle_legacy_interface
 
 __all__ = [
-    "DenseNet",
-    "DenseNet121_Weights",
-    "DenseNet161_Weights",
-    "DenseNet169_Weights",
-    "DenseNet201_Weights",
-    "densenet121",
-    "densenet161",
-    "densenet169",
-    "densenet201",
+    "pDenseNet",
+    "pDenseNet121_Weights",
+    "pDenseNet161_Weights",
+    "pDenseNet169_Weights",
+    "pDenseNet201_Weights",
+    "pdensenet121",
+    "pdensenet161",
+    "pdensenet169",
+    "pdensenet201",
 ]
 
 
@@ -135,7 +135,7 @@ class _Transition(nn.Sequential):
         self.pool = nn.AvgPool2d(kernel_size=2, stride=2)
 
 
-class DenseNet(nn.Module):
+class pDenseNet(nn.Module):
     r"""Densenet-BC model class, based on
     `"Densely Connected Convolutional Networks" <https://arxiv.org/pdf/1608.06993.pdf>`_.
 
@@ -212,53 +212,12 @@ class DenseNet(nn.Module):
                 nn.init.constant_(m.bias, 0)
 
     def forward(self, x: Tensor) -> Tensor:
-        torch.cuda.synchronize()
-        # features = self.features(x)
-        # out = F.relu(features, inplace=True)
-        # out = F.adaptive_avg_pool2d(out, (1, 1))
-        # out = torch.flatten(out, 1)
-        # out = self.classifier(out)
-
-
-        times = []
-
-        # st = time.perf_counter_ns()
-        # features = self.features(x)
-        # et = time.perf_counter_ns()
-        # times.append(et-st)
-        for module in self.features:
-            st = time.perf_counter_ns()
-            x = module(x)
-            torch.cuda.synchronize()
-            et = time.perf_counter_ns()
-            times.append(et-st)
-        features = x
-
-        st = time.perf_counter_ns()
+        features = self.features(x)
         out = F.relu(features, inplace=True)
-        torch.cuda.synchronize()
-        et = time.perf_counter_ns()
-        times.append(et-st)
-
-        st = time.perf_counter_ns()
         out = F.adaptive_avg_pool2d(out, (1, 1))
-        torch.cuda.synchronize()
-        et = time.perf_counter_ns()
-        times.append(et-st)
-
-        st = time.perf_counter_ns()
         out = torch.flatten(out, 1)
-        torch.cuda.synchronize()
-        et = time.perf_counter_ns()
-        times.append(et-st)
-
-        st = time.perf_counter_ns()
         out = self.classifier(out)
-        torch.cuda.synchronize()
-        et = time.perf_counter_ns()
-        times.append(et-st)
-
-        return out, times
+        return out
 
 
 def _load_state_dict(model: nn.Module, weights: WeightsEnum, progress: bool) -> None:
@@ -280,18 +239,18 @@ def _load_state_dict(model: nn.Module, weights: WeightsEnum, progress: bool) -> 
     model.load_state_dict(state_dict)
 
 
-def _densenet(
+def _pdensenet(
     growth_rate: int,
     block_config: Tuple[int, int, int, int],
     num_init_features: int,
     weights: Optional[WeightsEnum],
     progress: bool,
     **kwargs: Any,
-) -> DenseNet:
+) -> pDenseNet:
     if weights is not None:
         _ovewrite_named_param(kwargs, "num_classes", len(weights.meta["categories"]))
 
-    model = DenseNet(growth_rate, block_config, num_init_features, **kwargs)
+    model = pDenseNet(growth_rate, block_config, num_init_features, **kwargs)
 
     if weights is not None:
         _load_state_dict(model=model, weights=weights, progress=progress)
@@ -307,7 +266,7 @@ _COMMON_META = {
 }
 
 
-class DenseNet121_Weights(WeightsEnum):
+class pDenseNet121_Weights(WeightsEnum):
     IMAGENET1K_V1 = Weights(
         url="https://download.pytorch.org/models/densenet121-a639ec97.pth",
         transforms=partial(ImageClassification, crop_size=224),
@@ -327,7 +286,7 @@ class DenseNet121_Weights(WeightsEnum):
     DEFAULT = IMAGENET1K_V1
 
 
-class DenseNet161_Weights(WeightsEnum):
+class pDenseNet161_Weights(WeightsEnum):
     IMAGENET1K_V1 = Weights(
         url="https://download.pytorch.org/models/densenet161-8d451a50.pth",
         transforms=partial(ImageClassification, crop_size=224),
@@ -347,7 +306,7 @@ class DenseNet161_Weights(WeightsEnum):
     DEFAULT = IMAGENET1K_V1
 
 
-class DenseNet169_Weights(WeightsEnum):
+class pDenseNet169_Weights(WeightsEnum):
     IMAGENET1K_V1 = Weights(
         url="https://download.pytorch.org/models/densenet169-b2777c0a.pth",
         transforms=partial(ImageClassification, crop_size=224),
@@ -367,7 +326,7 @@ class DenseNet169_Weights(WeightsEnum):
     DEFAULT = IMAGENET1K_V1
 
 
-class DenseNet201_Weights(WeightsEnum):
+class pDenseNet201_Weights(WeightsEnum):
     IMAGENET1K_V1 = Weights(
         url="https://download.pytorch.org/models/densenet201-c1103571.pth",
         transforms=partial(ImageClassification, crop_size=224),
@@ -388,8 +347,8 @@ class DenseNet201_Weights(WeightsEnum):
 
 
 @register_model()
-@handle_legacy_interface(weights=("pretrained", DenseNet121_Weights.IMAGENET1K_V1))
-def densenet121(*, weights: Optional[DenseNet121_Weights] = None, progress: bool = True, **kwargs: Any) -> DenseNet:
+@handle_legacy_interface(weights=("pretrained", pDenseNet121_Weights.IMAGENET1K_V1))
+def pdensenet121(*, weights: Optional[pDenseNet121_Weights] = None, progress: bool = True, **kwargs: Any) -> pDenseNet:
     r"""Densenet-121 model from
     `Densely Connected Convolutional Networks <https://arxiv.org/abs/1608.06993>`_.
 
@@ -408,14 +367,14 @@ def densenet121(*, weights: Optional[DenseNet121_Weights] = None, progress: bool
     .. autoclass:: torchvision.models.DenseNet121_Weights
         :members:
     """
-    weights = DenseNet121_Weights.verify(weights)
+    weights = pDenseNet121_Weights.verify(weights)
 
-    return _densenet(32, (6, 12, 24, 16), 64, weights, progress, **kwargs)
+    return _pdensenet(32, (6, 12, 24, 16), 64, weights, progress, **kwargs)
 
 
 @register_model()
-@handle_legacy_interface(weights=("pretrained", DenseNet161_Weights.IMAGENET1K_V1))
-def densenet161(*, weights: Optional[DenseNet161_Weights] = None, progress: bool = True, **kwargs: Any) -> DenseNet:
+@handle_legacy_interface(weights=("pretrained", pDenseNet161_Weights.IMAGENET1K_V1))
+def pdensenet161(*, weights: Optional[pDenseNet161_Weights] = None, progress: bool = True, **kwargs: Any) -> pDenseNet:
     r"""Densenet-161 model from
     `Densely Connected Convolutional Networks <https://arxiv.org/abs/1608.06993>`_.
 
@@ -434,14 +393,14 @@ def densenet161(*, weights: Optional[DenseNet161_Weights] = None, progress: bool
     .. autoclass:: torchvision.models.DenseNet161_Weights
         :members:
     """
-    weights = DenseNet161_Weights.verify(weights)
+    weights = pDenseNet161_Weights.verify(weights)
 
-    return _densenet(48, (6, 12, 36, 24), 96, weights, progress, **kwargs)
+    return _pdensenet(48, (6, 12, 36, 24), 96, weights, progress, **kwargs)
 
 
 @register_model()
-@handle_legacy_interface(weights=("pretrained", DenseNet169_Weights.IMAGENET1K_V1))
-def densenet169(*, weights: Optional[DenseNet169_Weights] = None, progress: bool = True, **kwargs: Any) -> DenseNet:
+@handle_legacy_interface(weights=("pretrained", pDenseNet169_Weights.IMAGENET1K_V1))
+def pdensenet169(*, weights: Optional[pDenseNet169_Weights] = None, progress: bool = True, **kwargs: Any) -> pDenseNet:
     r"""Densenet-169 model from
     `Densely Connected Convolutional Networks <https://arxiv.org/abs/1608.06993>`_.
 
@@ -460,14 +419,14 @@ def densenet169(*, weights: Optional[DenseNet169_Weights] = None, progress: bool
     .. autoclass:: torchvision.models.DenseNet169_Weights
         :members:
     """
-    weights = DenseNet169_Weights.verify(weights)
+    weights = pDenseNet169_Weights.verify(weights)
 
-    return _densenet(32, (6, 12, 32, 32), 64, weights, progress, **kwargs)
+    return _pdensenet(32, (6, 12, 32, 32), 64, weights, progress, **kwargs)
 
 
 @register_model()
-@handle_legacy_interface(weights=("pretrained", DenseNet201_Weights.IMAGENET1K_V1))
-def densenet201(*, weights: Optional[DenseNet201_Weights] = None, progress: bool = True, **kwargs: Any) -> DenseNet:
+@handle_legacy_interface(weights=("pretrained", pDenseNet201_Weights.IMAGENET1K_V1))
+def pdensenet201(*, weights: Optional[pDenseNet201_Weights] = None, progress: bool = True, **kwargs: Any) -> pDenseNet:
     r"""Densenet-201 model from
     `Densely Connected Convolutional Networks <https://arxiv.org/abs/1608.06993>`_.
 
@@ -486,6 +445,6 @@ def densenet201(*, weights: Optional[DenseNet201_Weights] = None, progress: bool
     .. autoclass:: torchvision.models.DenseNet201_Weights
         :members:
     """
-    weights = DenseNet201_Weights.verify(weights)
+    weights = pDenseNet201_Weights.verify(weights)
 
-    return _densenet(32, (6, 12, 48, 32), 64, weights, progress, **kwargs)
+    return _pdensenet(32, (6, 12, 48, 32), 64, weights, progress, **kwargs)

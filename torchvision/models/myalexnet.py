@@ -45,6 +45,12 @@ class myAlexNet(nn.Module):
             nn.ReLU(inplace=True),
             nn.Linear(4096, num_classes),
         )
+        # self.featurescomp = nn.Sequential()
+        # for i,module in enumerate(self.features):
+        #     if i in [7,9,10]: #lst from god
+        #         self.featurescomp.add_module("uselessAPI"+str(i+1),torch.compile(module))
+        #     else:
+        #         self.featurescomp.add_module("uselessAPI"+str(i+1),module)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # x = self.features(x)
@@ -74,8 +80,7 @@ class myAlexNet(nn.Module):
         et = time.perf_counter_ns()
         times.append(et-st)
 
-        print(times)
-        return x
+        return x,times
 
 
 class myAlexNet_Weights(WeightsEnum):

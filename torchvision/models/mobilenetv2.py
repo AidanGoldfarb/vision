@@ -173,11 +173,12 @@ class MobileNetV2(nn.Module):
         # x = self.classifier(x)
         times = []
 
-        st = time.perf_counter_ns()
-        x = self.features(x)
-        torch.cuda.synchronize()
-        et = time.perf_counter_ns()
-        times.append(et-st)
+        for module in self.features:
+            st = time.perf_counter_ns()
+            x = module(x)
+            torch.cuda.synchronize()
+            et = time.perf_counter_ns()
+            times.append(et-st)
 
         st = time.perf_counter_ns()
         # Cannot use "squeeze" as batch-size can be 1
@@ -198,8 +199,7 @@ class MobileNetV2(nn.Module):
         et = time.perf_counter_ns()
         times.append(et-st)
         
-        print(times)
-        return x
+        return x,times
 
     def forward(self, x: Tensor) -> Tensor:
         return self._forward_impl(x)

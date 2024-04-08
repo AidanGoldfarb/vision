@@ -12,10 +12,10 @@ from ._meta import _IMAGENET_CATEGORIES
 from ._utils import _ovewrite_named_param, handle_legacy_interface
 
 
-__all__ = ["AlexNet", "AlexNet_Weights", "alexnet"]
+__all__ = ["pAlexNet", "pAlexNet_Weights", "palexnet"]
 
 
-class AlexNet(nn.Module):
+class pAlexNet(nn.Module):
     def __init__(self, num_classes: int = 1000, dropout: float = 0.5) -> None:
         super().__init__()
         _log_api_usage_once(self)
@@ -48,39 +48,13 @@ class AlexNet(nn.Module):
 
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # x = self.features(x)
-        # x = self.avgpool(x)
-        # x = torch.flatten(x, 1)
-        # x = self.classifier(x)
-        # return x
-        times = []
-        
-        for module in self.features:
-            st = time.perf_counter_ns()
-            x = module(x)
-            torch.cuda.synchronize()
-            et = time.perf_counter_ns()
-            times.append(et-st)
-
-        st = time.perf_counter_ns()
+        x = self.features(x)
         x = self.avgpool(x)
-        torch.cuda.synchronize()
-        et = time.perf_counter_ns()
-        times.append(et-st)
-
         x = torch.flatten(x, 1)
-        torch.cuda.synchronize()
-
-        st = time.perf_counter_ns()
         x = self.classifier(x)
-        torch.cuda.synchronize()
-        et = time.perf_counter_ns()
-        times.append(et-st)
+        return x
 
-        return x,times
-
-
-class AlexNet_Weights(WeightsEnum):
+class pAlexNet_Weights(WeightsEnum):
     IMAGENET1K_V1 = Weights(
         url="https://download.pytorch.org/models/alexnet-owt-7be5be79.pth",
         transforms=partial(ImageClassification, crop_size=224),
@@ -106,8 +80,8 @@ class AlexNet_Weights(WeightsEnum):
 
 
 @register_model()
-@handle_legacy_interface(weights=("pretrained", AlexNet_Weights.IMAGENET1K_V1))
-def alexnet(*, weights: Optional[AlexNet_Weights] = None, progress: bool = True, **kwargs: Any) -> AlexNet:
+@handle_legacy_interface(weights=("pretrained", pAlexNet_Weights.IMAGENET1K_V1))
+def palexnet(*, weights: Optional[pAlexNet_Weights] = None, progress: bool = True, **kwargs: Any) -> pAlexNet:
     """AlexNet model architecture from `One weird trick for parallelizing convolutional neural networks <https://arxiv.org/abs/1404.5997>`__.
 
     .. note::
@@ -134,12 +108,12 @@ def alexnet(*, weights: Optional[AlexNet_Weights] = None, progress: bool = True,
         :members:
     """
 
-    weights = AlexNet_Weights.verify(weights)
+    weights = pAlexNet_Weights.verify(weights)
 
     if weights is not None:
         _ovewrite_named_param(kwargs, "num_classes", len(weights.meta["categories"]))
 
-    model = AlexNet(**kwargs)
+    model = pAlexNet(**kwargs)
 
     if weights is not None:
         model.load_state_dict(weights.get_state_dict(progress=progress, check_hash=True))

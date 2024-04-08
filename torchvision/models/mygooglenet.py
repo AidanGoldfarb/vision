@@ -63,7 +63,6 @@ class myGoogLeNet(nn.Module):
         self.transform_input = transform_input
 
         self.conv1 = conv_block(3, 64, kernel_size=7, stride=2, padding=3)
-        self.conv1fun = torch.compile(self.conv1)
         self.maxpool1 = nn.MaxPool2d(3, stride=2, ceil_mode=True)
         self.conv2 = conv_block(64, 64, kernel_size=1)
         self.conv3 = conv_block(64, 192, kernel_size=3, padding=1)
@@ -74,7 +73,6 @@ class myGoogLeNet(nn.Module):
         self.maxpool3 = nn.MaxPool2d(3, stride=2, ceil_mode=True)
 
         self.inception4a = inception_block(480, 192, 96, 208, 16, 48, 64)
-        self.inception4acomp = torch.compile(self.inception4a)
         self.inception4b = inception_block(512, 160, 112, 224, 24, 64, 64)
         self.inception4c = inception_block(512, 128, 128, 256, 24, 64, 64)
         self.inception4d = inception_block(512, 112, 144, 288, 32, 64, 64)
@@ -83,6 +81,18 @@ class myGoogLeNet(nn.Module):
 
         self.inception5a = inception_block(832, 256, 160, 320, 32, 128, 128)
         self.inception5b = inception_block(832, 384, 192, 384, 48, 128, 128)
+
+        self.layers = [self.conv1,self.maxpool1,self.conv2,self.conv3,self.maxpool2,self.inception3a,
+            self.inception3b,self.maxpool3,self.inception4a,self.inception4b,self.inception4c,self.inception4d,self.inception4e,
+            self.maxpool4,self.inception5a,self.inception5b]
+
+        self.layerscomp = []
+
+        for i,layer in enumerate(self.layers):
+            if i in [5,6,8,9,10,11,12,14,15]: #lst from god
+                self.layerscomp.append(torch.compile(layer))
+            else:
+                self.layerscomp.append(layer)
 
         if aux_logits:
             self.aux1 = inception_aux_block(512, num_classes, dropout=dropout_aux)
@@ -115,7 +125,6 @@ class myGoogLeNet(nn.Module):
         torch.cuda.synchronize()
         # # N x 3 x 224 x 224
         # x = self.conv1(x)
-        # #x = self.conv1fun(x)
         # # N x 64 x 112 x 112
         # x = self.maxpool1(x)
         # # N x 64 x 56 x 56
@@ -168,162 +177,15 @@ class myGoogLeNet(nn.Module):
         # # N x 1000 (num_classes)
         times = []
 
-        st = time.perf_counter_ns()
-        # N x 3 x 224 x 224
-        x = self.conv1(x)
-        torch.cuda.synchronize()
-        et = time.perf_counter_ns()
-        times.append(et-st)
+        for layer in self.layerscomp:
+            st = time.perf_counter_ns()
+            x = layer(x)
+            torch.cuda.synchronize()
+            et = time.perf_counter_ns()
+            times.append(et-st)
 
-        #x = self.conv1fun(x)
-
-        st = time.perf_counter_ns()
-        # N x 64 x 112 x 112
-        x = self.maxpool1(x)
-        torch.cuda.synchronize()
-        et = time.perf_counter_ns()
-        times.append(et-st)
-
-        st = time.perf_counter_ns()
-        # N x 64 x 56 x 56
-        x = self.conv2(x)
-        torch.cuda.synchronize()
-        et = time.perf_counter_ns()
-        times.append(et-st)
-
-        st = time.perf_counter_ns()
-        # N x 64 x 56 x 56
-        x = self.conv3(x)
-        torch.cuda.synchronize()
-        et = time.perf_counter_ns()
-        times.append(et-st)
-
-        st = time.perf_counter_ns()
-        # N x 192 x 56 x 56
-        x = self.maxpool2(x)
-        torch.cuda.synchronize()
-        et = time.perf_counter_ns()
-        times.append(et-st)
-
-        st = time.perf_counter_ns()
-        # N x 192 x 28 x 28
-        x = self.inception3a(x)
-        torch.cuda.synchronize()
-        et = time.perf_counter_ns()
-        times.append(et-st)
-
-        st = time.perf_counter_ns()
-        # N x 256 x 28 x 28
-        x = self.inception3b(x)
-        torch.cuda.synchronize()
-        et = time.perf_counter_ns()
-        times.append(et-st)
-
-        st = time.perf_counter_ns()
-        # N x 480 x 28 x 28
-        x = self.maxpool3(x)
-        torch.cuda.synchronize()
-        et = time.perf_counter_ns()
-        times.append(et-st)
-
-        st = time.perf_counter_ns()
-        # N x 480 x 14 x 14
-        #x = self.inception4a(x)
-        x = self.inception4acomp(x)
-        torch.cuda.synchronize()
-        et = time.perf_counter_ns()
-        times.append(et-st)
-        
-
-        # N x 512 x 14 x 14
-        aux1: Optional[Tensor] = None
-        if self.aux1 is not None:
-            if self.training:
-                aux1 = self.aux1(x)
-
-        st = time.perf_counter_ns()
-        x = self.inception4b(x)
-        torch.cuda.synchronize()
-        et = time.perf_counter_ns()
-        times.append(et-st)
-
-        st = time.perf_counter_ns()
-        # N x 512 x 14 x 14
-        x = self.inception4c(x)
-        torch.cuda.synchronize()
-        et = time.perf_counter_ns()
-        times.append(et-st)
-
-        st = time.perf_counter_ns()
-        # N x 512 x 14 x 14
-        x = self.inception4d(x)
-        torch.cuda.synchronize()
-        et = time.perf_counter_ns()
-        times.append(et-st)
-
-        # N x 528 x 14 x 14
-        aux2: Optional[Tensor] = None
-        if self.aux2 is not None:
-            if self.training:
-                aux2 = self.aux2(x)
-
-        st = time.perf_counter_ns()
-        x = self.inception4e(x)
-        torch.cuda.synchronize()
-        et = time.perf_counter_ns()
-        times.append(et-st)
-
-        st = time.perf_counter_ns()
-        # N x 832 x 14 x 14
-        x = self.maxpool4(x)
-        torch.cuda.synchronize()
-        et = time.perf_counter_ns()
-        times.append(et-st)
-
-        st = time.perf_counter_ns()
-        # N x 832 x 7 x 7
-        x = self.inception5a(x)
-        torch.cuda.synchronize()
-        et = time.perf_counter_ns()
-        times.append(et-st)
-
-        st = time.perf_counter_ns()
-        # N x 832 x 7 x 7
-        x = self.inception5b(x)
-        torch.cuda.synchronize()
-        et = time.perf_counter_ns()
-        times.append(et-st)
-
-        st = time.perf_counter_ns()
-        # N x 1024 x 7 x 7
-        x = self.avgpool(x)
-        torch.cuda.synchronize()
-        et = time.perf_counter_ns()
-        times.append(et-st)
-        
-        st = time.perf_counter_ns()
-        # N x 1024 x 1 x 1
-        x = torch.flatten(x, 1)
-        torch.cuda.synchronize()
-        et = time.perf_counter_ns()
-        times.append(et-st)
-
-        st = time.perf_counter_ns()
-        # N x 1024
-        x = self.dropout(x)
-        torch.cuda.synchronize()
-        et = time.perf_counter_ns()
-        times.append(et-st)
-
-        st = time.perf_counter_ns()
-        x = self.fc(x)
-        torch.cuda.synchronize()
-        et = time.perf_counter_ns()
-        times.append(et-st)
-
-        print(times)
         # N x 1000 (num_classes)
-        return x, aux2, aux1
+        return x, None, None, times
 
     @torch.jit.unused
     def eager_outputs(self, x: Tensor, aux2: Tensor, aux1: Optional[Tensor]) -> myGoogLeNetOutputs:
@@ -334,14 +196,14 @@ class myGoogLeNet(nn.Module):
 
     def forward(self, x: Tensor) -> myGoogLeNetOutputs:
         x = self._transform_input(x)
-        x, aux1, aux2 = self._forward(x)
+        x, aux1, aux2,times = self._forward(x)
         aux_defined = self.training and self.aux_logits
         if torch.jit.is_scripting():
             if not aux_defined:
                 warnings.warn("Scripted GoogleNet always returns GoogleNetOutputs Tuple")
-            return myGoogLeNetOutputs(x, aux2, aux1)
+            return myGoogLeNetOutputs(x, aux2, aux1),times
         else:
-            return self.eager_outputs(x, aux2, aux1)
+            return self.eager_outputs(x, aux2, aux1),times
 
 
 class Inception(nn.Module):

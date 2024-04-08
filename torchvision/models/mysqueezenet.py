@@ -126,9 +126,7 @@ class mySqueezeNet(nn.Module):
         et = time.perf_counter_ns()
         times.append(et-st)
 
-        print(times)
-
-        return x
+        return x,times
 
 
 def _mysqueezenet(

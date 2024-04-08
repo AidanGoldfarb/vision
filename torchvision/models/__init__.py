@@ -20,6 +20,12 @@ from .mydensenet import *
 from .mysqueezenet import *
 from .myalexnet import *
 from .mymobilenetv2 import *
+from .palexnet import *
+from .pdensenet import *
+from .pgooglenet import *
+from .pmobilenetv2 import *
+from .psqueezenet import *
+from .presnet import *
 from . import detection, optical_flow, quantization, segmentation, video
 
 # The Weights and WeightsEnum are developer-facing utils that we make public for

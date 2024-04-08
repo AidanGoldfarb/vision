@@ -14,7 +14,7 @@ from ._meta import _IMAGENET_CATEGORIES
 from ._utils import _ovewrite_named_param, handle_legacy_interface
 
 
-__all__ = ["SqueezeNet", "SqueezeNet1_0_Weights", "SqueezeNet1_1_Weights", "squeezenet1_0", "squeezenet1_1"]
+__all__ = ["pSqueezeNet", "pSqueezeNet1_0_Weights", "pSqueezeNet1_1_Weights", "psqueezenet1_0", "psqueezenet1_1"]
 
 
 class Fire(nn.Module):
@@ -35,7 +35,7 @@ class Fire(nn.Module):
         )
 
 
-class SqueezeNet(nn.Module):
+class pSqueezeNet(nn.Module):
     def __init__(self, version: str = "1_0", num_classes: int = 1000, dropout: float = 0.5) -> None:
         super().__init__()
         _log_api_usage_once(self)
@@ -95,48 +95,20 @@ class SqueezeNet(nn.Module):
                     init.constant_(m.bias, 0)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        torch.cuda.synchronize()
-        # x = self.features(x)
-        # x = self.classifier(x)
-        # return torch.flatten(x, 1)
-        times = []
-
-        # st = time.perf_counter_ns()
-        # x = self.features(x)
-        # et = time.perf_counter_ns()
-        # times.append(et-st)
-        for module in self.features:
-            st = time.perf_counter_ns()
-            x = module(x)
-            torch.cuda.synchronize()
-            et = time.perf_counter_ns()
-            times.append(et-st)
-
-        st = time.perf_counter_ns()
+        x = self.features(x)
         x = self.classifier(x)
-        torch.cuda.synchronize()
-        et = time.perf_counter_ns()
-        times.append(et-st)
+        return torch.flatten(x, 1)
 
-        st = time.perf_counter_ns()
-        x = torch.flatten(x,1)
-        torch.cuda.synchronize()
-        et = time.perf_counter_ns()
-        times.append(et-st)
-
-        return x,times
-
-
-def _squeezenet(
+def _psqueezenet(
     version: str,
     weights: Optional[WeightsEnum],
     progress: bool,
     **kwargs: Any,
-) -> SqueezeNet:
+) -> pSqueezeNet:
     if weights is not None:
         _ovewrite_named_param(kwargs, "num_classes", len(weights.meta["categories"]))
 
-    model = SqueezeNet(version, **kwargs)
+    model = pSqueezeNet(version, **kwargs)
 
     if weights is not None:
         model.load_state_dict(weights.get_state_dict(progress=progress, check_hash=True))
@@ -151,7 +123,7 @@ _COMMON_META = {
 }
 
 
-class SqueezeNet1_0_Weights(WeightsEnum):
+class pSqueezeNet1_0_Weights(WeightsEnum):
     IMAGENET1K_V1 = Weights(
         url="https://download.pytorch.org/models/squeezenet1_0-b66bff10.pth",
         transforms=partial(ImageClassification, crop_size=224),
@@ -172,7 +144,7 @@ class SqueezeNet1_0_Weights(WeightsEnum):
     DEFAULT = IMAGENET1K_V1
 
 
-class SqueezeNet1_1_Weights(WeightsEnum):
+class pSqueezeNet1_1_Weights(WeightsEnum):
     IMAGENET1K_V1 = Weights(
         url="https://download.pytorch.org/models/squeezenet1_1-b8a52dc0.pth",
         transforms=partial(ImageClassification, crop_size=224),
@@ -194,10 +166,10 @@ class SqueezeNet1_1_Weights(WeightsEnum):
 
 
 @register_model()
-@handle_legacy_interface(weights=("pretrained", SqueezeNet1_0_Weights.IMAGENET1K_V1))
-def squeezenet1_0(
-    *, weights: Optional[SqueezeNet1_0_Weights] = None, progress: bool = True, **kwargs: Any
-) -> SqueezeNet:
+@handle_legacy_interface(weights=("pretrained", pSqueezeNet1_0_Weights.IMAGENET1K_V1))
+def psqueezenet1_0(
+    *, weights: Optional[pSqueezeNet1_0_Weights] = None, progress: bool = True, **kwargs: Any
+) -> pSqueezeNet:
     """SqueezeNet model architecture from the `SqueezeNet: AlexNet-level
     accuracy with 50x fewer parameters and <0.5MB model size
     <https://arxiv.org/abs/1602.07360>`_ paper.
@@ -218,15 +190,15 @@ def squeezenet1_0(
     .. autoclass:: torchvision.models.SqueezeNet1_0_Weights
         :members:
     """
-    weights = SqueezeNet1_0_Weights.verify(weights)
-    return _squeezenet("1_0", weights, progress, **kwargs)
+    weights = pSqueezeNet1_0_Weights.verify(weights)
+    return _psqueezenet("1_0", weights, progress, **kwargs)
 
 
 @register_model()
-@handle_legacy_interface(weights=("pretrained", SqueezeNet1_1_Weights.IMAGENET1K_V1))
-def squeezenet1_1(
-    *, weights: Optional[SqueezeNet1_1_Weights] = None, progress: bool = True, **kwargs: Any
-) -> SqueezeNet:
+@handle_legacy_interface(weights=("pretrained", pSqueezeNet1_1_Weights.IMAGENET1K_V1))
+def psqueezenet1_1(
+    *, weights: Optional[pSqueezeNet1_1_Weights] = None, progress: bool = True, **kwargs: Any
+) -> pSqueezeNet:
     """SqueezeNet 1.1 model from the `official SqueezeNet repo
     <https://github.com/DeepScale/SqueezeNet/tree/master/SqueezeNet_v1.1>`_.
 
@@ -249,5 +221,5 @@ def squeezenet1_1(
     .. autoclass:: torchvision.models.SqueezeNet1_1_Weights
         :members:
     """
-    weights = SqueezeNet1_1_Weights.verify(weights)
-    return _squeezenet("1_1", weights, progress, **kwargs)
+    weights = pSqueezeNet1_1_Weights.verify(weights)
+    return _psqueezenet("1_1", weights, progress, **kwargs)

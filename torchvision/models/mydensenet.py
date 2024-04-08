@@ -200,7 +200,7 @@ class myDenseNet(nn.Module):
 
         self.featurescomp = nn.Sequential()
         for i,module in enumerate(self.features):
-            if i in [0,1,2,4,6,10,14]: #lst from god
+            if i in []: #lst from god
                 self.featurescomp.add_module("uselessAPI"+str(i+1),torch.compile(module))
             else:
                 self.featurescomp.add_module("uselessAPI"+str(i+1),module)
@@ -259,9 +259,7 @@ class myDenseNet(nn.Module):
         et = time.perf_counter_ns()
         times.append(et-st)
 
-        print(times)
-
-        return out
+        return out,times
 
 
 def _load_state_dict(model: nn.Module, weights: WeightsEnum, progress: bool) -> None:

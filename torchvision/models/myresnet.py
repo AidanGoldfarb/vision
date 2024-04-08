@@ -344,8 +344,7 @@ class myResNet(nn.Module):
         et = time.perf_counter_ns()
         layer_times.append(et-st)
 
-        print(layer_times)
-        return x
+        return x,layer_times
 
     def forward(self, x: Tensor) -> Tensor:
         return self._forward_impl(x)
