@@ -69,6 +69,7 @@ class InvertedResidual(nn.Module):
 class MobileNetV2(nn.Module):
     def __init__(
         self,
+        timed, sync, cust,
         num_classes: int = 1000,
         width_mult: float = 1.0,
         inverted_residual_setting: Optional[List[List[int]]] = None,
@@ -93,6 +94,10 @@ class MobileNetV2(nn.Module):
         """
         super().__init__()
         _log_api_usage_once(self)
+        
+        self.timed = timed
+        self.sync = sync
+        self.cust = cust
 
         if block is None:
             block = InvertedResidual
@@ -162,17 +167,9 @@ class MobileNetV2(nn.Module):
                 nn.init.normal_(m.weight, 0, 0.01)
                 nn.init.zeros_(m.bias)
 
-    def _forward_impl(self, x: Tensor) -> Tensor:
-        torch.cuda.synchronize()
-        # This exists since TorchScript doesn't support inheritance, so the superclass method
-        # (this one) needs to have a name other than `forward` that can be accessed in a subclass
-        # x = self.features(x)
-        # # Cannot use "squeeze" as batch-size can be 1
-        # x = nn.functional.adaptive_avg_pool2d(x, (1, 1))
-        # x = torch.flatten(x, 1)
-        # x = self.classifier(x)
+    def _forward_timed_sync(self, x: Tensor) -> Tensor:
         times = []
-
+        torch.cuda.synchronize()
         for module in self.features:
             st = time.perf_counter_ns()
             x = module(x)
@@ -201,8 +198,73 @@ class MobileNetV2(nn.Module):
         
         return x,times
 
+    def _forward_timed(self, x: Tensor) -> Tensor:
+        times = []
+        for module in self.features:
+            st = time.perf_counter_ns()
+            x = module(x)
+            
+            et = time.perf_counter_ns()
+            times.append(et-st)
+
+        st = time.perf_counter_ns()
+        # Cannot use "squeeze" as batch-size can be 1
+        x = nn.functional.adaptive_avg_pool2d(x, (1, 1))
+        
+        et = time.perf_counter_ns()
+        times.append(et-st)
+
+        st = time.perf_counter_ns()
+        x = torch.flatten(x, 1)
+        
+        et = time.perf_counter_ns()
+        times.append(et-st)
+
+        st = time.perf_counter_ns()
+        x = self.classifier(x)
+        
+        et = time.perf_counter_ns()
+        times.append(et-st)
+        
+        return x,times
+
+    def _forward_sync(self, x: Tensor) -> Tensor:
+        torch.cuda.synchronize()
+        for module in self.features:
+            x = module(x)
+            torch.cuda.synchronize()
+
+        # Cannot use "squeeze" as batch-size can be 1
+        x = nn.functional.adaptive_avg_pool2d(x, (1, 1))
+        torch.cuda.synchronize()
+        
+        x = torch.flatten(x, 1)
+        torch.cuda.synchronize()
+        
+        x = self.classifier(x)
+        torch.cuda.synchronize()
+        
+        return x,None
+    
+    def _forward_pure(self, x: Tensor) -> Tensor:
+        for module in self.features:
+            x = module(x)
+        # Cannot use "squeeze" as batch-size can be 1
+        x = nn.functional.adaptive_avg_pool2d(x, (1, 1))
+        x = torch.flatten(x, 1)
+        x = self.classifier(x)
+        
+        return x, None
+
     def forward(self, x: Tensor) -> Tensor:
-        return self._forward_impl(x)
+        if self.timed and self.sync:
+            return self._forward_timed_sync(x)
+        elif self.timed:
+            return self._forward_timed(x)
+        elif self.sync:
+            return self._forward_sync(x)
+        else:
+            return self._forward_pure(x)
 
 
 _COMMON_META = {
@@ -257,7 +319,7 @@ class MobileNet_V2_Weights(WeightsEnum):
 @register_model()
 @handle_legacy_interface(weights=("pretrained", MobileNet_V2_Weights.IMAGENET1K_V1))
 def mobilenet_v2(
-    *, weights: Optional[MobileNet_V2_Weights] = None, progress: bool = True, **kwargs: Any
+    timed,sync,cust,*, weights: Optional[MobileNet_V2_Weights] = None, progress: bool = True, **kwargs: Any
 ) -> MobileNetV2:
     """MobileNetV2 architecture from the `MobileNetV2: Inverted Residuals and Linear
     Bottlenecks <https://arxiv.org/abs/1801.04381>`_ paper.
@@ -283,7 +345,7 @@ def mobilenet_v2(
     if weights is not None:
         _ovewrite_named_param(kwargs, "num_classes", len(weights.meta["categories"]))
 
-    model = MobileNetV2(**kwargs)
+    model = MobileNetV2(timed,sync,cust,**kwargs)
 
     if weights is not None:
         model.load_state_dict(weights.get_state_dict(progress=progress, check_hash=True))

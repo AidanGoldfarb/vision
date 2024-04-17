@@ -18,15 +18,15 @@ from ._meta import _IMAGENET_CATEGORIES
 from ._utils import _ovewrite_named_param, handle_legacy_interface
 
 __all__ = [
-    "myDenseNet",
-    "myDenseNet121_Weights",
-    "myDenseNet161_Weights",
-    "myDenseNet169_Weights",
-    "myDenseNet201_Weights",
-    "mydensenet121",
-    "mydensenet161",
-    "mydensenet169",
-    "mydensenet201",
+    "sDenseNet",
+    "sDenseNet121_Weights",
+    "sDenseNet161_Weights",
+    "sDenseNet169_Weights",
+    "sDenseNet201_Weights",
+    "sdensenet121",
+    "sdensenet161",
+    "sdensenet169",
+    "sdensenet201",
 ]
 
 
@@ -113,7 +113,7 @@ class _DenseBlock(nn.ModuleDict):
                 num_input_features + i * growth_rate,
                 growth_rate=growth_rate,
                 bn_size=bn_size,
-                drop_rate=drop_rate, 
+                drop_rate=drop_rate,
                 memory_efficient=memory_efficient,
             )
             self.add_module("denselayer%d" % (i + 1), layer)
@@ -135,7 +135,7 @@ class _Transition(nn.Sequential):
         self.pool = nn.AvgPool2d(kernel_size=2, stride=2)
 
 
-class myDenseNet(nn.Module):
+class sDenseNet(nn.Module):
     r"""Densenet-BC model class, based on
     `"Densely Connected Convolutional Networks" <https://arxiv.org/pdf/1608.06993.pdf>`_.
 
@@ -153,8 +153,6 @@ class myDenseNet(nn.Module):
 
     def __init__(
         self,
-        timed,
-        sync,
         growth_rate: int = 32,
         block_config: Tuple[int, int, int, int] = (6, 12, 24, 16),
         num_init_features: int = 64,
@@ -200,12 +198,6 @@ class myDenseNet(nn.Module):
         # Final batch norm
         self.features.add_module("norm5", nn.BatchNorm2d(num_features))
 
-        self.featurescomp = nn.Sequential()
-        for i,module in enumerate(self.features):
-            if i in [4,6]: #lst from god
-                self.featurescomp.add_module("uselessAPI"+str(i+1),torch.compile(module))
-            else:
-                self.featurescomp.add_module("uselessAPI"+str(i+1),module)
         # Linear layer
         self.classifier = nn.Linear(num_features, num_classes)
 
@@ -220,64 +212,53 @@ class myDenseNet(nn.Module):
                 nn.init.constant_(m.bias, 0)
 
     def forward(self, x: Tensor) -> Tensor:
-        if sync:
-            torch.cuda.synchronize()
+        torch.cuda.synchronize()
         # features = self.features(x)
-        # #features = self.featuresfun(x)
         # out = F.relu(features, inplace=True)
         # out = F.adaptive_avg_pool2d(out, (1, 1))
         # out = torch.flatten(out, 1)
         # out = self.classifier(out)
+
+
         times = []
 
-        for module in self.featurescomp:
-            if timed:
-                st = time.perf_counter_ns()
+        # st = time.perf_counter_ns()
+        # features = self.features(x)
+        # et = time.perf_counter_ns()
+        # times.append(et-st)
+        for module in self.features:
+            st = time.perf_counter_ns()
             x = module(x)
-            if sync:
-                torch.cuda.synchronize() 
-            if timed:
-                et = time.perf_counter_ns()
-                times.append(et-st)
+            torch.cuda.synchronize()
+            et = time.perf_counter_ns()
+            times.append(et-st)
         features = x
 
-        if timed:
-            st = time.perf_counter_ns()
+        st = time.perf_counter_ns()
         out = F.relu(features, inplace=True)
-        if sync:
-            torch.cuda.synchronize()
-        if timed:
-            et = time.perf_counter_ns()
-            times.append(et-st)
+        torch.cuda.synchronize()
+        et = time.perf_counter_ns()
+        times.append(et-st)
 
-        if timed:
-            st = time.perf_counter_ns()
+        st = time.perf_counter_ns()
         out = F.adaptive_avg_pool2d(out, (1, 1))
-        if sync:
-            torch.cuda.synchronize()
-        if timed:
-            et = time.perf_counter_ns()
-            times.append(et-st)
+        torch.cuda.synchronize()
+        et = time.perf_counter_ns()
+        times.append(et-st)
 
-        if timed:
-            st = time.perf_counter_ns()
+        st = time.perf_counter_ns()
         out = torch.flatten(out, 1)
-        if sync:
-            torch.cuda.synchronize()
-        if timed:
-            et = time.perf_counter_ns()
-            times.append(et-st)
+        torch.cuda.synchronize()
+        et = time.perf_counter_ns()
+        times.append(et-st)
 
-        if timed:
-            st = time.perf_counter_ns()
+        st = time.perf_counter_ns()
         out = self.classifier(out)
-        if sync:
-            torch.cuda.synchronize()
-        if timed:
-            et = time.perf_counter_ns()
-            times.append(et-st)
+        torch.cuda.synchronize()
+        et = time.perf_counter_ns()
+        times.append(et-st)
 
-        return out,times
+        return out, times
 
 
 def _load_state_dict(model: nn.Module, weights: WeightsEnum, progress: bool) -> None:
@@ -299,18 +280,18 @@ def _load_state_dict(model: nn.Module, weights: WeightsEnum, progress: bool) -> 
     model.load_state_dict(state_dict)
 
 
-def _mydensenet(
+def _sdensenet(
     growth_rate: int,
     block_config: Tuple[int, int, int, int],
     num_init_features: int,
     weights: Optional[WeightsEnum],
     progress: bool,
     **kwargs: Any,
-) -> myDenseNet:
+) -> sDenseNet:
     if weights is not None:
         _ovewrite_named_param(kwargs, "num_classes", len(weights.meta["categories"]))
 
-    model = myDenseNet(growth_rate, block_config, num_init_features, **kwargs)
+    model = sDenseNet(growth_rate, block_config, num_init_features, **kwargs)
 
     if weights is not None:
         _load_state_dict(model=model, weights=weights, progress=progress)
@@ -326,7 +307,7 @@ _COMMON_META = {
 }
 
 
-class myDenseNet121_Weights(WeightsEnum):
+class sDenseNet121_Weights(WeightsEnum):
     IMAGENET1K_V1 = Weights(
         url="https://download.pytorch.org/models/densenet121-a639ec97.pth",
         transforms=partial(ImageClassification, crop_size=224),
@@ -346,7 +327,7 @@ class myDenseNet121_Weights(WeightsEnum):
     DEFAULT = IMAGENET1K_V1
 
 
-class myDenseNet161_Weights(WeightsEnum):
+class sDenseNet161_Weights(WeightsEnum):
     IMAGENET1K_V1 = Weights(
         url="https://download.pytorch.org/models/densenet161-8d451a50.pth",
         transforms=partial(ImageClassification, crop_size=224),
@@ -366,7 +347,7 @@ class myDenseNet161_Weights(WeightsEnum):
     DEFAULT = IMAGENET1K_V1
 
 
-class myDenseNet169_Weights(WeightsEnum):
+class sDenseNet169_Weights(WeightsEnum):
     IMAGENET1K_V1 = Weights(
         url="https://download.pytorch.org/models/densenet169-b2777c0a.pth",
         transforms=partial(ImageClassification, crop_size=224),
@@ -386,7 +367,7 @@ class myDenseNet169_Weights(WeightsEnum):
     DEFAULT = IMAGENET1K_V1
 
 
-class myDenseNet201_Weights(WeightsEnum):
+class sDenseNet201_Weights(WeightsEnum):
     IMAGENET1K_V1 = Weights(
         url="https://download.pytorch.org/models/densenet201-c1103571.pth",
         transforms=partial(ImageClassification, crop_size=224),
@@ -407,104 +388,104 @@ class myDenseNet201_Weights(WeightsEnum):
 
 
 @register_model()
-@handle_legacy_interface(weights=("pretrained", myDenseNet121_Weights.IMAGENET1K_V1))
-def mydensenet121(*, weights: Optional[myDenseNet121_Weights] = None, progress: bool = True, **kwargs: Any) -> myDenseNet:
+@handle_legacy_interface(weights=("pretrained", sDenseNet121_Weights.IMAGENET1K_V1))
+def sdensenet121(*, weights: Optional[sDenseNet121_Weights] = None, progress: bool = True, **kwargs: Any) -> sDenseNet:
     r"""Densenet-121 model from
     `Densely Connected Convolutional Networks <https://arxiv.org/abs/1608.06993>`_.
 
     Args:
-        weights (:class:`~torchvision.models.myDenseNet121_Weights`, optional): The
+        weights (:class:`~torchvision.models.sDenseNet121_Weights`, optional): The
             pretrained weights to use. See
-            :class:`~torchvision.models.myDenseNet121_Weights` below for
+            :class:`~torchvision.models.sDenseNet121_Weights` below for
             more details, and possible values. By default, no pre-trained
             weights are used.
         progress (bool, optional): If True, displays a progress bar of the download to stderr. Default is True.
-        **kwargs: parameters passed to the ``torchvision.models.densenet.myDenseNet``
+        **kwargs: parameters passed to the ``torchvision.models.densenet.sDenseNet``
             base class. Please refer to the `source code
             <https://github.com/pytorch/vision/blob/main/torchvision/models/densenet.py>`_
             for more details about this class.
 
-    .. autoclass:: torchvision.models.myDenseNet121_Weights
+    .. autoclass:: torchvision.models.sDenseNet121_Weights
         :members:
     """
-    weights = myDenseNet121_Weights.verify(weights)
+    weights = sDenseNet121_Weights.verify(weights)
 
-    return _mydensenet(32, (6, 12, 24, 16), 64, weights, progress, **kwargs)
+    return _sdensenet(32, (6, 12, 24, 16), 64, weights, progress, **kwargs)
 
 
 @register_model()
-@handle_legacy_interface(weights=("pretrained", myDenseNet161_Weights.IMAGENET1K_V1))
-def mydensenet161(*, weights: Optional[myDenseNet161_Weights] = None, progress: bool = True, **kwargs: Any) -> myDenseNet:
+@handle_legacy_interface(weights=("pretrained", sDenseNet161_Weights.IMAGENET1K_V1))
+def sdensenet161(*, weights: Optional[sDenseNet161_Weights] = None, progress: bool = True, **kwargs: Any) -> sDenseNet:
     r"""Densenet-161 model from
     `Densely Connected Convolutional Networks <https://arxiv.org/abs/1608.06993>`_.
 
     Args:
-        weights (:class:`~torchvision.models.myDenseNet161_Weights`, optional): The
+        weights (:class:`~torchvision.models.sDenseNet161_Weights`, optional): The
             pretrained weights to use. See
-            :class:`~torchvision.models.myDenseNet161_Weights` below for
+            :class:`~torchvision.models.sDenseNet161_Weights` below for
             more details, and possible values. By default, no pre-trained
             weights are used.
         progress (bool, optional): If True, displays a progress bar of the download to stderr. Default is True.
-        **kwargs: parameters passed to the ``torchvision.models.densenet.myDenseNet``
+        **kwargs: parameters passed to the ``torchvision.models.sdensenet.sDenseNet``
             base class. Please refer to the `source code
             <https://github.com/pytorch/vision/blob/main/torchvision/models/densenet.py>`_
             for more details about this class.
 
-    .. autoclass:: torchvision.models.myDenseNet161_Weights
+    .. autoclass:: torchvision.models.sDenseNet161_Weights
         :members:
     """
-    weights = myDenseNet161_Weights.verify(weights)
+    weights = sDenseNet161_Weights.verify(weights)
 
-    return _mydensenet(48, (6, 12, 36, 24), 96, weights, progress, **kwargs)
+    return _sdensenet(48, (6, 12, 36, 24), 96, weights, progress, **kwargs)
 
 
 @register_model()
-@handle_legacy_interface(weights=("pretrained", myDenseNet169_Weights.IMAGENET1K_V1))
-def mydensenet169(*, weights: Optional[myDenseNet169_Weights] = None, progress: bool = True, **kwargs: Any) -> myDenseNet:
+@handle_legacy_interface(weights=("pretrained", sDenseNet169_Weights.IMAGENET1K_V1))
+def sdensenet169(*, weights: Optional[sDenseNet169_Weights] = None, progress: bool = True, **kwargs: Any) -> sDenseNet:
     r"""Densenet-169 model from
     `Densely Connected Convolutional Networks <https://arxiv.org/abs/1608.06993>`_.
 
     Args:
-        weights (:class:`~torchvision.models.myDenseNet169_Weights`, optional): The
+        weights (:class:`~torchvision.models.sDenseNet169_Weights`, optional): The
             pretrained weights to use. See
-            :class:`~torchvision.models.myDenseNet169_Weights` below for
+            :class:`~torchvision.models.sDenseNet169_Weights` below for
             more details, and possible values. By default, no pre-trained
             weights are used.
         progress (bool, optional): If True, displays a progress bar of the download to stderr. Default is True.
-        **kwargs: parameters passed to the ``torchvision.models.densenet.myDenseNet``
+        **kwargs: parameters passed to the ``torchvision.models.densenet.sDenseNet``
             base class. Please refer to the `source code
             <https://github.com/pytorch/vision/blob/main/torchvision/models/densenet.py>`_
             for more details about this class.
 
-    .. autoclass:: torchvision.models.myDenseNet169_Weights
+    .. autoclass:: torchvision.models.sDenseNet169_Weights
         :members:
     """
-    weights = myDenseNet169_Weights.verify(weights)
+    weights = sDenseNet169_Weights.verify(weights)
 
-    return _mydensenet(32, (6, 12, 32, 32), 64, weights, progress, **kwargs)
+    return _sdensenet(32, (6, 12, 32, 32), 64, weights, progress, **kwargs)
 
 
 @register_model()
-@handle_legacy_interface(weights=("pretrained", myDenseNet201_Weights.IMAGENET1K_V1))
-def mydensenet201(*, weights: Optional[myDenseNet201_Weights] = None, progress: bool = True, **kwargs: Any) -> myDenseNet:
+@handle_legacy_interface(weights=("pretrained", sDenseNet201_Weights.IMAGENET1K_V1))
+def sdensenet201(*, weights: Optional[sDenseNet201_Weights] = None, progress: bool = True, **kwargs: Any) -> sDenseNet:
     r"""Densenet-201 model from
     `Densely Connected Convolutional Networks <https://arxiv.org/abs/1608.06993>`_.
 
     Args:
-        weights (:class:`~torchvision.models.myDenseNet201_Weights`, optional): The
+        weights (:class:`~torchvision.models.sDenseNet201_Weights`, optional): The
             pretrained weights to use. See
-            :class:`~torchvision.models.myDenseNet201_Weights` below for
+            :class:`~torchvision.models.sDenseNet201_Weights` below for
             more details, and possible values. By default, no pre-trained
             weights are used.
         progress (bool, optional): If True, displays a progress bar of the download to stderr. Default is True.
-        **kwargs: parameters passed to the ``torchvision.models.densenet.myDenseNet``
+        **kwargs: parameters passed to the ``torchvision.models.densenet.sDenseNet``
             base class. Please refer to the `source code
             <https://github.com/pytorch/vision/blob/main/torchvision/models/densenet.py>`_
             for more details about this class.
 
-    .. autoclass:: torchvision.models.myDenseNet201_Weights
+    .. autoclass:: torchvision.models.sDenseNet201_Weights
         :members:
     """
-    weights = myDenseNet201_Weights.verify(weights)
+    weights = sDenseNet201_Weights.verify(weights)
 
-    return _mydensenet(32, (6, 12, 48, 32), 64, weights, progress, **kwargs)
+    return _sdensenet(32, (6, 12, 48, 32), 64, weights, progress, **kwargs)

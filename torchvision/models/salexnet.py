@@ -12,16 +12,15 @@ from ._meta import _IMAGENET_CATEGORIES
 from ._utils import _ovewrite_named_param, handle_legacy_interface
 
 
-__all__ = ["myAlexNet", "myAlexNet_Weights", "myalexnet"]
+__all__ = ["sAlexnet", "sAlexnet_Weights", "salexnet"]
 
 
-class myAlexNet(nn.Module):
-    def __init__(self, pure, timed, num_classes: int = 1000, dropout: float = 0.5) -> None:
+class sAlexnet(nn.Module):
+    def __init__(self, num_classes: int = 1000, dropout: float = 0.5) -> None:
         super().__init__()
         _log_api_usage_once(self)
         self.features = nn.Sequential(
             nn.Conv2d(3, 64, kernel_size=11, stride=4, padding=2),
-            #torch.compile(nn.Conv2d(3, 64, kernel_size=11, stride=4, padding=2)),
             nn.ReLU(inplace=True),
             nn.MaxPool2d(kernel_size=3, stride=2),
             nn.Conv2d(64, 192, kernel_size=5, padding=2),
@@ -45,62 +44,32 @@ class myAlexNet(nn.Module):
             nn.ReLU(inplace=True),
             nn.Linear(4096, num_classes),
         )
-        # self.featurescomp = nn.Sequential()
-        # for i,module in enumerate(self.features):
-        #     if i in [7,9,10]: #lst from god
-        #         self.featurescomp.add_module("uselessAPI"+str(i+1),torch.compile(module))
-        #     else:
-        #         self.featurescomp.add_module("uselessAPI"+str(i+1),module)
+
+
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-
         # x = self.features(x)
         # x = self.avgpool(x)
         # x = torch.flatten(x, 1)
         # x = self.classifier(x)
-        times = []
-        if sync:
-            torch.cuda.synchronize()
-    
+        # return x
         for module in self.features:
-            if timed:
-                st = time.perf_counter_ns()
             x = module(x)
-            if sync:
-                torch.cuda.synchronize()
-            if timed:
-                et = time.perf_counter_ns()
-                times.append(et-st)
+            torch.cuda.synchronize()
 
-        if timed:
-            st = time.perf_counter_ns()
         x = self.avgpool(x)
-        if sync:
-            torch.cuda.synchronize()
-        if timed:
-            et = time.perf_counter_ns()
-            times.append(et-st)
+        torch.cuda.synchronize()
 
-        if timed:
-            st = time.perf_counter_ns() 
         x = torch.flatten(x, 1)
-        if timed:
-            et = time.perf_counter_ns()
-            times.append(et-st)
+        torch.cuda.synchronize()
 
-        if timed:
-            st = time.perf_counter_ns()
         x = self.classifier(x)
-        if sync:
-            torch.cuda.synchronize()
-        if timed:
-            et = time.perf_counter_ns()
-            times.append(et-st)
+        torch.cuda.synchronize()
 
-        return x,times
+        return x
 
 
-class myAlexNet_Weights(WeightsEnum):
+class sAlexnet_Weights(WeightsEnum):
     IMAGENET1K_V1 = Weights(
         url="https://download.pytorch.org/models/alexnet-owt-7be5be79.pth",
         transforms=partial(ImageClassification, crop_size=224),
@@ -126,40 +95,40 @@ class myAlexNet_Weights(WeightsEnum):
 
 
 @register_model()
-@handle_legacy_interface(weights=("pretrained", myAlexNet_Weights.IMAGENET1K_V1))
-def myalexnet(*, weights: Optional[myAlexNet_Weights] = None, progress: bool = True, **kwargs: Any) -> myAlexNet:
-    """myAlexNet model architecture from `One weird trick for parallelizing convolutional neural networks <https://arxiv.org/abs/1404.5997>`__.
+@handle_legacy_interface(weights=("pretrained", sAlexnet_Weights.IMAGENET1K_V1))
+def salexnet(*, weights: Optional[sAlexnet_Weights] = None, progress: bool = True, **kwargs: Any) -> sAlexnet:
+    """sAlexnet model architecture from `One weird trick for parallelizing convolutional neural networks <https://arxiv.org/abs/1404.5997>`__.
 
     .. note::
-        myAlexNet was originally introduced in the `ImageNet Classification with
+        sAlexnet was originally introduced in the `ImageNet Classification with
         Deep Convolutional Neural Networks
         <https://papers.nips.cc/paper/2012/hash/c399862d3b9d6b76c8436e924a68c45b-Abstract.html>`__
         paper. Our implementation is based instead on the "One weird trick"
         paper above.
 
     Args:
-        weights (:class:`~torchvision.models.myAlexNet_Weights`, optional): The
+        weights (:class:`~torchvision.models.sAlexnet_Weights`, optional): The
             pretrained weights to use. See
-            :class:`~torchvision.models.myAlexNet_Weights` below for
+            :class:`~torchvision.models.sAlexnet_Weights` below for
             more details, and possible values. By default, no pre-trained
             weights are used.
         progress (bool, optional): If True, displays a progress bar of the
             download to stderr. Default is True.
-        **kwargs: parameters passed to the ``torchvision.models.squeezenet.myAlexNet``
+        **kwargs: parameters passed to the ``torchvision.models.squeezenet.sAlexnet``
             base class. Please refer to the `source code
             <https://github.com/pytorch/vision/blob/main/torchvision/models/alexnet.py>`_
             for more details about this class.
 
-    .. autoclass:: torchvision.models.myAlexNet_Weights
+    .. autoclass:: torchvision.models.sAlexnet_Weights
         :members:
     """
 
-    weights = myAlexNet_Weights.verify(weights)
+    weights = sAlexnet_Weights.verify(weights)
 
     if weights is not None:
         _ovewrite_named_param(kwargs, "num_classes", len(weights.meta["categories"]))
 
-    model = myAlexNet(**kwargs)
+    model = sAlexnet(**kwargs)
 
     if weights is not None:
         model.load_state_dict(weights.get_state_dict(progress=progress, check_hash=True))

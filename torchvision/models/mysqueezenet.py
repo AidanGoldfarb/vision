@@ -36,7 +36,7 @@ class Fire(nn.Module):
 
 
 class mySqueezeNet(nn.Module):
-    def __init__(self, version: str = "1_0", num_classes: int = 1000, dropout: float = 0.5) -> None:
+    def __init__(self, timed,sync,version: str = "1_0", num_classes: int = 1000, dropout: float = 0.5) -> None:
         super().__init__()
         _log_api_usage_once(self)
         self.num_classes = num_classes
@@ -58,7 +58,7 @@ class mySqueezeNet(nn.Module):
             )
         elif version == "1_1":
             self.features = nn.Sequential(
-                torch.compile(nn.Conv2d(3, 64, kernel_size=3, stride=2)),
+                nn.Conv2d(3, 64, kernel_size=3, stride=2),
                 nn.ReLU(inplace=True),
                 nn.MaxPool2d(kernel_size=3, stride=2, ceil_mode=True),
                 Fire(64, 16, 64, 64),
@@ -72,7 +72,7 @@ class mySqueezeNet(nn.Module):
                 Fire(384, 64, 256, 256),
                 Fire(512, 64, 256, 256),
             )
-            self.featurescomp = torch.compile(self.features)
+            
         else:
             # FIXME: Is this needed? mySqueezeNet should only be called from the
             # FIXME: mysqueezenet1_x() functions
@@ -95,7 +95,8 @@ class mySqueezeNet(nn.Module):
                     init.constant_(m.bias, 0)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        torch.cuda.synchronize()
+        if sync:
+            torch.cuda.synchronize()
         # x = self.features(x)
         # x = self.classifier(x)
         # return torch.flatten(x, 1)
@@ -108,23 +109,31 @@ class mySqueezeNet(nn.Module):
         # times.append(et-st)
 
         for module in self.features:
-            st = time.perf_counter_ns()
+            if timed:
+                st = time.perf_counter_ns()
             x = module(x)
             torch.cuda.synchronize()
+            if timed:
+                et = time.perf_counter_ns()
+                times.append(et-st)
+
+        if timed:
+            st = time.perf_counter_ns()
+        x = self.classifier(x)
+        if sync:
+            torch.cuda.synchronize()
+        if timed:
             et = time.perf_counter_ns()
             times.append(et-st)
 
-        st = time.perf_counter_ns()
-        x = self.classifier(x)
-        torch.cuda.synchronize()
-        et = time.perf_counter_ns()
-        times.append(et-st)
-
-        st = time.perf_counter_ns()
+        if timed:
+            st = time.perf_counter_ns()
         x = torch.flatten(x,1)
-        torch.cuda.synchronize()
-        et = time.perf_counter_ns()
-        times.append(et-st)
+        if sync:
+            torch.cuda.synchronize()
+        if timed:
+            et = time.perf_counter_ns()
+            times.append(et-st)
 
         return x,times
 

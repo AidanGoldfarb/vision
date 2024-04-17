@@ -14,7 +14,7 @@ from ._meta import _IMAGENET_CATEGORIES
 from ._utils import _ovewrite_named_param, handle_legacy_interface
 
 
-__all__ = ["SqueezeNet", "SqueezeNet1_0_Weights", "SqueezeNet1_1_Weights", "squeezenet1_0", "squeezenet1_1"]
+__all__ = ["sSqueezeNet", "sSqueezeNet1_0_Weights", "sSqueezeNet1_1_Weights", "ssqueezenet1_0", "ssqueezenet1_1"]
 
 
 class Fire(nn.Module):
@@ -35,8 +35,8 @@ class Fire(nn.Module):
         )
 
 
-class SqueezeNet(nn.Module):
-    def __init__(self, timed,sync,cust, version: str = "1_0", num_classes: int = 1000, dropout: float = 0.5) -> None:
+class sSqueezeNet(nn.Module):
+    def __init__(self, version: str = "1_0", num_classes: int = 1000, dropout: float = 0.5) -> None:
         super().__init__()
         _log_api_usage_once(self)
         self.num_classes = num_classes
@@ -72,20 +72,12 @@ class SqueezeNet(nn.Module):
                 Fire(384, 64, 256, 256),
                 Fire(512, 64, 256, 256),
             )
-            if cust:
-                self.featurescomp = nn.Sequential()
-                for i,module in enumerate(self.features):
-                    if i in []: #on va voir
-                        self.featurescomp.add_module("uselessAPI"+str(i+1),torch.compile(module))
-                    else:
-                        self.featurescomp.add_module("uselessAPI"+str(i+1),module)
-                self.features= self.featurescomp
 
         else:
-            # FIXME: Is this needed? SqueezeNet should only be called from the
-            # FIXME: squeezenet1_x() functions
+            # FIXME: Is this needed? sSqueezeNet should only be called from the
+            # FIXME: ssqueezenet1_x() functions
             # FIXME: This checking is not done for the other models
-            raise ValueError(f"Unsupported SqueezeNet version {version}: 1_0 or 1_1 expected")
+            raise ValueError(f"Unsupported sSqueezeNet version {version}: 1_0 or 1_1 expected")
 
         # Final convolution is initialized differently from the rest
         final_conv = nn.Conv2d(512, self.num_classes, kernel_size=1)
@@ -102,29 +94,8 @@ class SqueezeNet(nn.Module):
                 if m.bias is not None:
                     init.constant_(m.bias, 0)
 
-    def _forward_timed_sync(self, x: torch.Tensor) -> torch.Tensor:
-        times = []
-        for module in self.features:
-            st = time.perf_counter_ns()
-            x = module(x)
-            torch.cuda.synchronize()
-            et = time.perf_counter_ns()
-            times.append(et-st)
-
-        st = time.perf_counter_ns()
-        x = self.classifier(x)
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         torch.cuda.synchronize()
-        et = time.perf_counter_ns()
-        times.append(et-st)
-
-        st = time.perf_counter_ns()
-        x = torch.flatten(x,1)
-        torch.cuda.synchronize()
-        et = time.perf_counter_ns()
-        times.append(et-st)
-
-        return x,times
-    def _forward_timed(self, x: torch.Tensor) -> torch.Tensor:
         # x = self.features(x)
         # x = self.classifier(x)
         # return torch.flatten(x, 1)
@@ -137,65 +108,35 @@ class SqueezeNet(nn.Module):
         for module in self.features:
             st = time.perf_counter_ns()
             x = module(x)
-            
+            torch.cuda.synchronize()
             et = time.perf_counter_ns()
             times.append(et-st)
 
         st = time.perf_counter_ns()
         x = self.classifier(x)
-        
+        torch.cuda.synchronize()
         et = time.perf_counter_ns()
         times.append(et-st)
 
         st = time.perf_counter_ns()
         x = torch.flatten(x,1)
-        
+        torch.cuda.synchronize()
         et = time.perf_counter_ns()
         times.append(et-st)
 
         return x,times
-    def _forward_sync(self, x: torch.Tensor) -> torch.Tensor:
-        torch.cuda.synchronize()
-        for module in self.features:
-            x = module(x)
-            torch.cuda.synchronize()
-        
-        x = self.classifier(x)
-        torch.cuda.synchronize()
-        
-        x = torch.flatten(x,1)
-        torch.cuda.synchronize()
-
-        return x,None
-    def _forward_pure(self, x: torch.Tensor) -> torch.Tensor:
-        for module in self.features:
-            x = module(x)
-        x = self.classifier(x)
-        x = torch.flatten(x,1)
-        return x,None
-    
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        if self.timed and self.sync:
-            return self._forward_timed_sync(x)
-        elif self.timed:
-            return self._forward_timed(x)
-        elif self.sync:
-            return self._forward_sync(x)
-        else:
-            return self._forward_pure(x)
 
 
-def _squeezenet(
-    timed,sync,cust,
+def _ssqueezenet(
     version: str,
     weights: Optional[WeightsEnum],
     progress: bool,
     **kwargs: Any,
-) -> SqueezeNet:
+) -> sSqueezeNet:
     if weights is not None:
         _ovewrite_named_param(kwargs, "num_classes", len(weights.meta["categories"]))
 
-    model = SqueezeNet(timed,sync,cust,version, **kwargs)
+    model = sSqueezeNet(version, **kwargs)
 
     if weights is not None:
         model.load_state_dict(weights.get_state_dict(progress=progress, check_hash=True))
@@ -210,7 +151,7 @@ _COMMON_META = {
 }
 
 
-class SqueezeNet1_0_Weights(WeightsEnum):
+class sSqueezeNet1_0_Weights(WeightsEnum):
     IMAGENET1K_V1 = Weights(
         url="https://download.pytorch.org/models/squeezenet1_0-b66bff10.pth",
         transforms=partial(ImageClassification, crop_size=224),
@@ -231,7 +172,7 @@ class SqueezeNet1_0_Weights(WeightsEnum):
     DEFAULT = IMAGENET1K_V1
 
 
-class SqueezeNet1_1_Weights(WeightsEnum):
+class sSqueezeNet1_1_Weights(WeightsEnum):
     IMAGENET1K_V1 = Weights(
         url="https://download.pytorch.org/models/squeezenet1_1-b8a52dc0.pth",
         transforms=partial(ImageClassification, crop_size=224),
@@ -253,60 +194,60 @@ class SqueezeNet1_1_Weights(WeightsEnum):
 
 
 @register_model()
-@handle_legacy_interface(weights=("pretrained", SqueezeNet1_0_Weights.IMAGENET1K_V1))
-def squeezenet1_0(
-    *, weights: Optional[SqueezeNet1_0_Weights] = None, progress: bool = True, **kwargs: Any
-) -> SqueezeNet:
-    """SqueezeNet model architecture from the `SqueezeNet: AlexNet-level
+@handle_legacy_interface(weights=("pretrained", sSqueezeNet1_0_Weights.IMAGENET1K_V1))
+def ssqueezenet1_0(
+    *, weights: Optional[sSqueezeNet1_0_Weights] = None, progress: bool = True, **kwargs: Any
+) -> sSqueezeNet:
+    """sSqueezeNet model architecture from the `sSqueezeNet: AlexNet-level
     accuracy with 50x fewer parameters and <0.5MB model size
     <https://arxiv.org/abs/1602.07360>`_ paper.
 
     Args:
-        weights (:class:`~torchvision.models.SqueezeNet1_0_Weights`, optional): The
+        weights (:class:`~torchvision.models.sSqueezeNet1_0_Weights`, optional): The
             pretrained weights to use. See
-            :class:`~torchvision.models.SqueezeNet1_0_Weights` below for
+            :class:`~torchvision.models.sSqueezeNet1_0_Weights` below for
             more details, and possible values. By default, no pre-trained
             weights are used.
         progress (bool, optional): If True, displays a progress bar of the
             download to stderr. Default is True.
-        **kwargs: parameters passed to the ``torchvision.models.squeezenet.SqueezeNet``
+        **kwargs: parameters passed to the ``torchvision.models.squeezenet.sSqueezeNet``
             base class. Please refer to the `source code
             <https://github.com/pytorch/vision/blob/main/torchvision/models/squeezenet.py>`_
             for more details about this class.
 
-    .. autoclass:: torchvision.models.SqueezeNet1_0_Weights
+    .. autoclass:: torchvision.models.sSqueezeNet1_0_Weights
         :members:
     """
-    weights = SqueezeNet1_0_Weights.verify(weights)
-    return _squeezenet("1_0", weights, progress, **kwargs)
+    weights = sSqueezeNet1_0_Weights.verify(weights)
+    return _ssqueezenet("1_0", weights, progress, **kwargs)
 
 
 @register_model()
-@handle_legacy_interface(weights=("pretrained", SqueezeNet1_1_Weights.IMAGENET1K_V1))
-def squeezenet1_1(
-    timed,sync,cust,*, weights: Optional[SqueezeNet1_1_Weights] = None, progress: bool = True, **kwargs: Any
-) -> SqueezeNet:
-    """SqueezeNet 1.1 model from the `official SqueezeNet repo
-    <https://github.com/DeepScale/SqueezeNet/tree/master/SqueezeNet_v1.1>`_.
+@handle_legacy_interface(weights=("pretrained", sSqueezeNet1_1_Weights.IMAGENET1K_V1))
+def ssqueezenet1_1(
+    *, weights: Optional[sSqueezeNet1_1_Weights] = None, progress: bool = True, **kwargs: Any
+) -> sSqueezeNet:
+    """sSqueezeNet 1.1 model from the `official sSqueezeNet repo
+    <https://github.com/DeepScale/sSqueezeNet/tree/master/sSqueezeNet_v1.1>`_.
 
-    SqueezeNet 1.1 has 2.4x less computation and slightly fewer parameters
-    than SqueezeNet 1.0, without sacrificing accuracy.
+    sSqueezeNet 1.1 has 2.4x less computation and slightly fewer parameters
+    than sSqueezeNet 1.0, without sacrificing accuracy.
 
     Args:
-        weights (:class:`~torchvision.models.SqueezeNet1_1_Weights`, optional): The
+        weights (:class:`~torchvision.models.sSqueezeNet1_1_Weights`, optional): The
             pretrained weights to use. See
-            :class:`~torchvision.models.SqueezeNet1_1_Weights` below for
+            :class:`~torchvision.models.sSqueezeNet1_1_Weights` below for
             more details, and possible values. By default, no pre-trained
             weights are used.
         progress (bool, optional): If True, displays a progress bar of the
             download to stderr. Default is True.
-        **kwargs: parameters passed to the ``torchvision.models.squeezenet.SqueezeNet``
+        **kwargs: parameters passed to the ``torchvision.models.squeezenet.sSqueezeNet``
             base class. Please refer to the `source code
             <https://github.com/pytorch/vision/blob/main/torchvision/models/squeezenet.py>`_
             for more details about this class.
 
-    .. autoclass:: torchvision.models.SqueezeNet1_1_Weights
+    .. autoclass:: torchvision.models.sSqueezeNet1_1_Weights
         :members:
     """
-    weights = SqueezeNet1_1_Weights.verify(weights)
-    return _squeezenet(timed,sync,cust,"1_1", weights, progress, **kwargs)
+    weights = sSqueezeNet1_1_Weights.verify(weights)
+    return _ssqueezenet("1_1", weights, progress, **kwargs)

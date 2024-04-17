@@ -15,27 +15,27 @@ from ._utils import _ovewrite_named_param, handle_legacy_interface
 
 
 __all__ = [
-    "ResNet",
-    "ResNet18_Weights",
-    "ResNet34_Weights",
-    "ResNet50_Weights",
-    "ResNet101_Weights",
-    "ResNet152_Weights",
+    "sResnet",
+    "sResnet18_Weights",
+    "sResnet34_Weights",
+    "sResnet50_Weights",
+    "sResnet101_Weights",
+    "sResnet152_Weights",
     "ResNeXt50_32X4D_Weights",
     "ResNeXt101_32X8D_Weights",
     "ResNeXt101_64X4D_Weights",
-    "Wide_ResNet50_2_Weights",
-    "Wide_ResNet101_2_Weights",
-    "resnet18",
-    "resnet34",
-    "resnet50",
-    "resnet101",
-    "resnet152",
-    "resnext50_32x4d",
-    "resnext101_32x8d",
-    "resnext101_64x4d",
-    "wide_resnet50_2",
-    "wide_resnet101_2",
+    "Wide_sResnet50_2_Weights",
+    "Wide_sResnet101_2_Weights",
+    "sresnet18",
+    "sresnet34",
+    "sresnet50",
+    "sresnet101",
+    "sresnet152",
+    "sresnext50_32x4d",
+    "sresnext101_32x8d",
+    "sresnext101_64x4d",
+    "wide_sresnet50_2",
+    "wide_sresnet101_2",
 ]
 
 
@@ -111,8 +111,8 @@ class Bottleneck(nn.Module):
     # Bottleneck in torchvision places the stride for downsampling at 3x3 convolution(self.conv2)
     # while original implementation places the stride at the first 1x1 convolution(self.conv1)
     # according to "Deep residual learning for image recognition" https://arxiv.org/abs/1512.03385.
-    # This variant is also known as ResNet V1.5 and improves accuracy according to
-    # https://ngc.nvidia.com/catalog/model-scripts/nvidia:resnet_50_v1_5_for_pytorch.
+    # This variant is also known as sResnet V1.5 and improves accuracy according to
+    # https://ngc.nvidia.com/catalog/model-scripts/nvidia:sresnet_50_v1_5_for_pytorch.
 
     expansion: int = 4
 
@@ -165,12 +165,9 @@ class Bottleneck(nn.Module):
         return out
 
 
-class ResNet(nn.Module):
+class sResnet(nn.Module):
     def __init__(
         self,
-        timed,
-        sync,
-        cust,
         block: Type[Union[BasicBlock, Bottleneck]],
         layers: List[int],
         num_classes: int = 1000,
@@ -197,9 +194,6 @@ class ResNet(nn.Module):
                 "replace_stride_with_dilation should be None "
                 f"or a 3-element tuple, got {replace_stride_with_dilation}"
             )
-        self.timed = timed
-        self.sync = sync
-        self.cust = cust
         self.groups = groups
         self.base_width = width_per_group
         self.conv1 = nn.Conv2d(3, self.inplanes, kernel_size=7, stride=2, padding=3, bias=False)
@@ -210,11 +204,6 @@ class ResNet(nn.Module):
         self.layer2 = self._make_layer(block, 128, layers[1], stride=2, dilate=replace_stride_with_dilation[0])
         self.layer3 = self._make_layer(block, 256, layers[2], stride=2, dilate=replace_stride_with_dilation[1])
         self.layer4 = self._make_layer(block, 512, layers[3], stride=2, dilate=replace_stride_with_dilation[2])
-        if self.cust:
-            self.layer1 = torch.compile(self.layer1)
-            self.layer2 = torch.compile(self.layer2)
-            self.layer3 = torch.compile(self.layer3)
-            self.layer4 = torch.compile(self.layer4)
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
         self.fc = nn.Linear(512 * block.expansion, num_classes)
 
@@ -276,82 +265,13 @@ class ResNet(nn.Module):
 
         return nn.Sequential(*layers)
 
-    def _forward_timed(self, x: Tensor) -> Tensor:
-        
-        # See note [TorchScript super()]
-        layer_times = []
-        # See note [TorchScript super()]
-        
-        st = time.perf_counter_ns()
-        x = self.conv1(x)
-        
-        et = time.perf_counter_ns()
-        layer_times.append(et-st)
-
-        st = time.perf_counter_ns()
-        x = self.bn1(x)
-        
-        et = time.perf_counter_ns()
-        layer_times.append(et-st)
-
-        st = time.perf_counter_ns()
-        x = self.relu(x)
-        
-        et = time.perf_counter_ns()
-        layer_times.append(et-st)
-
-        st = time.perf_counter_ns()
-        x = self.maxpool(x)
-        
-        et = time.perf_counter_ns()
-        layer_times.append(et-st)
-
-        st = time.perf_counter_ns()
-        x = self.layer1(x)
-        
-        et = time.perf_counter_ns()
-        layer_times.append(et-st)
-        
-        st = time.perf_counter_ns()
-        x = self.layer2(x)
-        
-        et = time.perf_counter_ns()
-        layer_times.append(et-st)
-        
-        st = time.perf_counter_ns()
-        x = self.layer3(x)
-        
-        et = time.perf_counter_ns()
-        layer_times.append(et-st)
-
-        st = time.perf_counter_ns()
-        x = self.layer4(x)
-        
-        et = time.perf_counter_ns()
-        layer_times.append(et-st)
-
-        st = time.perf_counter_ns()
-        x = self.avgpool(x)
-        
-        et = time.perf_counter_ns()
-        layer_times.append(et-st)
-
-        x = torch.flatten(x, 1)
-        
-        st = time.perf_counter_ns()
-        x = self.fc(x)
-        
-        et = time.perf_counter_ns()
-        layer_times.append(et-st)
-
-        return x,layer_times
-
-    def _forward_timed_sync(self, x: Tensor) -> Tensor:
+    def _forward_impl(self, x: Tensor) -> Tensor:
         torch.cuda.synchronize()
         # See note [TorchScript super()]
         layer_times = []
         # See note [TorchScript super()]
         
+
         st = time.perf_counter_ns()
         x = self.conv1(x)
         torch.cuda.synchronize()
@@ -407,107 +327,30 @@ class ResNet(nn.Module):
         layer_times.append(et-st)
 
         x = torch.flatten(x, 1)
-        torch.cuda.synchronize()
+        
         st = time.perf_counter_ns()
         x = self.fc(x)
-        
+        torch.cuda.synchronize()
         et = time.perf_counter_ns()
         layer_times.append(et-st)
 
         return x,layer_times
 
-    def _forward_sync(self, x: Tensor) -> Tensor:
-        torch.cuda.synchronize()
-
-        x = self.conv1(x)
-        torch.cuda.synchronize()
-
-        x = self.bn1(x)
-        torch.cuda.synchronize()
-       
-        x = self.relu(x)
-        torch.cuda.synchronize()
-
-        x = self.maxpool(x)
-        torch.cuda.synchronize()
-    
-        x = self.layer1(x)
-        torch.cuda.synchronize()
-
-        x = self.layer2(x)
-        torch.cuda.synchronize()
-
-        x = self.layer3(x)
-        torch.cuda.synchronize()
-
-
-        x = self.layer4(x)
-        torch.cuda.synchronize()
-
-        x = self.avgpool(x)
-        torch.cuda.synchronize()
-
-        x = torch.flatten(x, 1)
-        torch.cuda.synchronize()
-
-
-        x = self.fc(x)
-        torch.cuda.synchronize()
-
-
-        return x,None
-    
-    def _forward_pure(self, x: Tensor) -> Tensor:
-
-        x = self.conv1(x)
-
-        x = self.bn1(x)
-       
-        x = self.relu(x)
-
-        x = self.maxpool(x)
-    
-        x = self.layer1(x)
-
-        x = self.layer2(x)
-
-        x = self.layer3(x)
-
-        x = self.layer4(x)
-
-        x = self.avgpool(x)
-
-        x = torch.flatten(x, 1)
-
-        x = self.fc(x)
-
-        return x,None
-    
     def forward(self, x: Tensor) -> Tensor:
-        if self.timed and self.sync:
-            return self._forward_timed_sync(x)
-        elif self.timed:
-            return self._forward_timed(x)
-        elif self.sync:
-            return self._forward_sync(x)
-        else:
-            return self._forward_pure(x)
+        return self._forward_impl(x)
 
 
-def _resnet(
-    timed,
-    sync,
-    cust,
+def _sresnet(
     block: Type[Union[BasicBlock, Bottleneck]],
     layers: List[int],
     weights: Optional[WeightsEnum],
     progress: bool,
     **kwargs: Any,
-) -> ResNet:
+) -> sResnet:
     if weights is not None:
         _ovewrite_named_param(kwargs, "num_classes", len(weights.meta["categories"]))
 
-    model = ResNet(timed,sync,cust,block, layers, **kwargs)
+    model = sResnet(block, layers, **kwargs)
 
     if weights is not None:
         model.load_state_dict(weights.get_state_dict(progress=progress, check_hash=True))
@@ -521,7 +364,7 @@ _COMMON_META = {
 }
 
 
-class ResNet18_Weights(WeightsEnum):
+class sResnet18_Weights(WeightsEnum):
     IMAGENET1K_V1 = Weights(
         url="https://download.pytorch.org/models/resnet18-f37072fd.pth",
         transforms=partial(ImageClassification, crop_size=224),
@@ -543,7 +386,7 @@ class ResNet18_Weights(WeightsEnum):
     DEFAULT = IMAGENET1K_V1
 
 
-class ResNet34_Weights(WeightsEnum):
+class sResnet34_Weights(WeightsEnum):
     IMAGENET1K_V1 = Weights(
         url="https://download.pytorch.org/models/resnet34-b627a593.pth",
         transforms=partial(ImageClassification, crop_size=224),
@@ -565,7 +408,7 @@ class ResNet34_Weights(WeightsEnum):
     DEFAULT = IMAGENET1K_V1
 
 
-class ResNet50_Weights(WeightsEnum):
+class sResnet50_Weights(WeightsEnum):
     IMAGENET1K_V1 = Weights(
         url="https://download.pytorch.org/models/resnet50-0676ba61.pth",
         transforms=partial(ImageClassification, crop_size=224),
@@ -608,7 +451,7 @@ class ResNet50_Weights(WeightsEnum):
     DEFAULT = IMAGENET1K_V2
 
 
-class ResNet101_Weights(WeightsEnum):
+class sResnet101_Weights(WeightsEnum):
     IMAGENET1K_V1 = Weights(
         url="https://download.pytorch.org/models/resnet101-63fe2227.pth",
         transforms=partial(ImageClassification, crop_size=224),
@@ -651,7 +494,7 @@ class ResNet101_Weights(WeightsEnum):
     DEFAULT = IMAGENET1K_V2
 
 
-class ResNet152_Weights(WeightsEnum):
+class sResnet152_Weights(WeightsEnum):
     IMAGENET1K_V1 = Weights(
         url="https://download.pytorch.org/models/resnet152-394f9c45.pth",
         transforms=partial(ImageClassification, crop_size=224),
@@ -805,7 +648,7 @@ class ResNeXt101_64X4D_Weights(WeightsEnum):
     DEFAULT = IMAGENET1K_V1
 
 
-class Wide_ResNet50_2_Weights(WeightsEnum):
+class Wide_sResnet50_2_Weights(WeightsEnum):
     IMAGENET1K_V1 = Weights(
         url="https://download.pytorch.org/models/wide_resnet50_2-95faca4d.pth",
         transforms=partial(ImageClassification, crop_size=224),
@@ -848,7 +691,7 @@ class Wide_ResNet50_2_Weights(WeightsEnum):
     DEFAULT = IMAGENET1K_V2
 
 
-class Wide_ResNet101_2_Weights(WeightsEnum):
+class Wide_sResnet101_2_Weights(WeightsEnum):
     IMAGENET1K_V1 = Weights(
         url="https://download.pytorch.org/models/wide_resnet101_2-32ee1156.pth",
         transforms=partial(ImageClassification, crop_size=224),
@@ -892,158 +735,158 @@ class Wide_ResNet101_2_Weights(WeightsEnum):
 
 
 @register_model()
-@handle_legacy_interface(weights=("pretrained", ResNet18_Weights.IMAGENET1K_V1))
-def resnet18(*, weights: Optional[ResNet18_Weights] = None, progress: bool = True, **kwargs: Any) -> ResNet:
-    """ResNet-18 from `Deep Residual Learning for Image Recognition <https://arxiv.org/abs/1512.03385>`__.
+@handle_legacy_interface(weights=("pretrained", sResnet18_Weights.IMAGENET1K_V1))
+def sresnet18(*, weights: Optional[sResnet18_Weights] = None, progress: bool = True, **kwargs: Any) -> sResnet:
+    """sResnet-18 from `Deep Residual Learning for Image Recognition <https://arxiv.org/abs/1512.03385>`__.
 
     Args:
-        weights (:class:`~torchvision.models.ResNet18_Weights`, optional): The
+        weights (:class:`~torchvision.models.sResnet18_Weights`, optional): The
             pretrained weights to use. See
-            :class:`~torchvision.models.ResNet18_Weights` below for
+            :class:`~torchvision.models.sResnet18_Weights` below for
             more details, and possible values. By default, no pre-trained
             weights are used.
         progress (bool, optional): If True, displays a progress bar of the
             download to stderr. Default is True.
-        **kwargs: parameters passed to the ``torchvision.models.resnet.ResNet``
+        **kwargs: parameters passed to the ``torchvision.models.resnet.sResnet``
             base class. Please refer to the `source code
             <https://github.com/pytorch/vision/blob/main/torchvision/models/resnet.py>`_
             for more details about this class.
 
-    .. autoclass:: torchvision.models.ResNet18_Weights
+    .. autoclass:: torchvision.models.sResnet18_Weights
         :members:
     """
-    weights = ResNet18_Weights.verify(weights)
+    weights = sResnet18_Weights.verify(weights)
 
-    return _resnet(BasicBlock, [2, 2, 2, 2], weights, progress, **kwargs)
+    return _sresnet(BasicBlock, [2, 2, 2, 2], weights, progress, **kwargs)
 
 
 @register_model()
-@handle_legacy_interface(weights=("pretrained", ResNet34_Weights.IMAGENET1K_V1))
-def resnet34(*, weights: Optional[ResNet34_Weights] = None, progress: bool = True, **kwargs: Any) -> ResNet:
-    """ResNet-34 from `Deep Residual Learning for Image Recognition <https://arxiv.org/abs/1512.03385>`__.
+@handle_legacy_interface(weights=("pretrained", sResnet34_Weights.IMAGENET1K_V1))
+def sresnet34(*, weights: Optional[sResnet34_Weights] = None, progress: bool = True, **kwargs: Any) -> sResnet:
+    """sResnet-34 from `Deep Residual Learning for Image Recognition <https://arxiv.org/abs/1512.03385>`__.
 
     Args:
-        weights (:class:`~torchvision.models.ResNet34_Weights`, optional): The
+        weights (:class:`~torchvision.models.sResnet34_Weights`, optional): The
             pretrained weights to use. See
-            :class:`~torchvision.models.ResNet34_Weights` below for
+            :class:`~torchvision.models.sResnet34_Weights` below for
             more details, and possible values. By default, no pre-trained
             weights are used.
         progress (bool, optional): If True, displays a progress bar of the
             download to stderr. Default is True.
-        **kwargs: parameters passed to the ``torchvision.models.resnet.ResNet``
+        **kwargs: parameters passed to the ``torchvision.models.resnet.sResnet``
             base class. Please refer to the `source code
             <https://github.com/pytorch/vision/blob/main/torchvision/models/resnet.py>`_
             for more details about this class.
 
-    .. autoclass:: torchvision.models.ResNet34_Weights
+    .. autoclass:: torchvision.models.sResnet34_Weights
         :members:
     """
-    weights = ResNet34_Weights.verify(weights)
+    weights = sResnet34_Weights.verify(weights)
 
-    return _resnet(BasicBlock, [3, 4, 6, 3], weights, progress, **kwargs)
+    return _sresnet(BasicBlock, [3, 4, 6, 3], weights, progress, **kwargs)
 
 
 @register_model()
-@handle_legacy_interface(weights=("pretrained", ResNet50_Weights.IMAGENET1K_V1))
-def resnet50(timed,sync,cust,*, weights: Optional[ResNet50_Weights] = None, progress: bool = True, **kwargs: Any) -> ResNet:
-    """ResNet-50 from `Deep Residual Learning for Image Recognition <https://arxiv.org/abs/1512.03385>`__.
+@handle_legacy_interface(weights=("pretrained", sResnet50_Weights.IMAGENET1K_V1))
+def sresnet50(*, weights: Optional[sResnet50_Weights] = None, progress: bool = True, **kwargs: Any) -> sResnet:
+    """sResnet-50 from `Deep Residual Learning for Image Recognition <https://arxiv.org/abs/1512.03385>`__.
 
     .. note::
        The bottleneck of TorchVision places the stride for downsampling to the second 3x3
        convolution while the original paper places it to the first 1x1 convolution.
-       This variant improves the accuracy and is known as `ResNet V1.5
+       This variant improves the accuracy and is known as `sResnet V1.5
        <https://ngc.nvidia.com/catalog/model-scripts/nvidia:resnet_50_v1_5_for_pytorch>`_.
 
     Args:
-        weights (:class:`~torchvision.models.ResNet50_Weights`, optional): The
+        weights (:class:`~torchvision.models.sResnet50_Weights`, optional): The
             pretrained weights to use. See
-            :class:`~torchvision.models.ResNet50_Weights` below for
+            :class:`~torchvision.models.sResnet50_Weights` below for
             more details, and possible values. By default, no pre-trained
             weights are used.
         progress (bool, optional): If True, displays a progress bar of the
             download to stderr. Default is True.
-        **kwargs: parameters passed to the ``torchvision.models.resnet.ResNet``
+        **kwargs: parameters passed to the ``torchvision.models.resnet.sResnet``
             base class. Please refer to the `source code
             <https://github.com/pytorch/vision/blob/main/torchvision/models/resnet.py>`_
             for more details about this class.
 
-    .. autoclass:: torchvision.models.ResNet50_Weights
+    .. autoclass:: torchvision.models.sResnet50_Weights
         :members:
     """
-    weights = ResNet50_Weights.verify(weights)
+    weights = sResnet50_Weights.verify(weights)
 
-    return _resnet(timed,sync,cust,Bottleneck, [3, 4, 6, 3], weights, progress, **kwargs)
+    return _sresnet(Bottleneck, [3, 4, 6, 3], weights, progress, **kwargs)
 
 
 @register_model()
-@handle_legacy_interface(weights=("pretrained", ResNet101_Weights.IMAGENET1K_V1))
-def resnet101(*, weights: Optional[ResNet101_Weights] = None, progress: bool = True, **kwargs: Any) -> ResNet:
-    """ResNet-101 from `Deep Residual Learning for Image Recognition <https://arxiv.org/abs/1512.03385>`__.
+@handle_legacy_interface(weights=("pretrained", sResnet101_Weights.IMAGENET1K_V1))
+def sresnet101(*, weights: Optional[sResnet101_Weights] = None, progress: bool = True, **kwargs: Any) -> sResnet:
+    """sResnet-101 from `Deep Residual Learning for Image Recognition <https://arxiv.org/abs/1512.03385>`__.
 
     .. note::
        The bottleneck of TorchVision places the stride for downsampling to the second 3x3
        convolution while the original paper places it to the first 1x1 convolution.
-       This variant improves the accuracy and is known as `ResNet V1.5
+       This variant improves the accuracy and is known as `sResnet V1.5
        <https://ngc.nvidia.com/catalog/model-scripts/nvidia:resnet_50_v1_5_for_pytorch>`_.
 
     Args:
-        weights (:class:`~torchvision.models.ResNet101_Weights`, optional): The
+        weights (:class:`~torchvision.models.sResnet101_Weights`, optional): The
             pretrained weights to use. See
-            :class:`~torchvision.models.ResNet101_Weights` below for
+            :class:`~torchvision.models.sResnet101_Weights` below for
             more details, and possible values. By default, no pre-trained
             weights are used.
         progress (bool, optional): If True, displays a progress bar of the
             download to stderr. Default is True.
-        **kwargs: parameters passed to the ``torchvision.models.resnet.ResNet``
+        **kwargs: parameters passed to the ``torchvision.models.resnet.sResnet``
             base class. Please refer to the `source code
             <https://github.com/pytorch/vision/blob/main/torchvision/models/resnet.py>`_
             for more details about this class.
 
-    .. autoclass:: torchvision.models.ResNet101_Weights
+    .. autoclass:: torchvision.models.sResnet101_Weights
         :members:
     """
-    weights = ResNet101_Weights.verify(weights)
+    weights = sResnet101_Weights.verify(weights)
 
-    return _resnet(Bottleneck, [3, 4, 23, 3], weights, progress, **kwargs)
+    return _sresnet(Bottleneck, [3, 4, 23, 3], weights, progress, **kwargs)
 
 
 @register_model()
-@handle_legacy_interface(weights=("pretrained", ResNet152_Weights.IMAGENET1K_V1))
-def resnet152(*, weights: Optional[ResNet152_Weights] = None, progress: bool = True, **kwargs: Any) -> ResNet:
-    """ResNet-152 from `Deep Residual Learning for Image Recognition <https://arxiv.org/abs/1512.03385>`__.
+@handle_legacy_interface(weights=("pretrained", sResnet152_Weights.IMAGENET1K_V1))
+def sresnet152(*, weights: Optional[sResnet152_Weights] = None, progress: bool = True, **kwargs: Any) -> sResnet:
+    """sResnet-152 from `Deep Residual Learning for Image Recognition <https://arxiv.org/abs/1512.03385>`__.
 
     .. note::
        The bottleneck of TorchVision places the stride for downsampling to the second 3x3
        convolution while the original paper places it to the first 1x1 convolution.
-       This variant improves the accuracy and is known as `ResNet V1.5
+       This variant improves the accuracy and is known as `sResnet V1.5
        <https://ngc.nvidia.com/catalog/model-scripts/nvidia:resnet_50_v1_5_for_pytorch>`_.
 
     Args:
-        weights (:class:`~torchvision.models.ResNet152_Weights`, optional): The
+        weights (:class:`~torchvision.models.sResnet152_Weights`, optional): The
             pretrained weights to use. See
-            :class:`~torchvision.models.ResNet152_Weights` below for
+            :class:`~torchvision.models.sResnet152_Weights` below for
             more details, and possible values. By default, no pre-trained
             weights are used.
         progress (bool, optional): If True, displays a progress bar of the
             download to stderr. Default is True.
-        **kwargs: parameters passed to the ``torchvision.models.resnet.ResNet``
+        **kwargs: parameters passed to the ``torchvision.models.resnet.sResnet``
             base class. Please refer to the `source code
             <https://github.com/pytorch/vision/blob/main/torchvision/models/resnet.py>`_
             for more details about this class.
 
-    .. autoclass:: torchvision.models.ResNet152_Weights
+    .. autoclass:: torchvision.models.sResnet152_Weights
         :members:
     """
-    weights = ResNet152_Weights.verify(weights)
+    weights = sResnet152_Weights.verify(weights)
 
-    return _resnet(Bottleneck, [3, 8, 36, 3], weights, progress, **kwargs)
+    return _sresnet(Bottleneck, [3, 8, 36, 3], weights, progress, **kwargs)
 
 
 @register_model()
 @handle_legacy_interface(weights=("pretrained", ResNeXt50_32X4D_Weights.IMAGENET1K_V1))
-def resnext50_32x4d(
+def sresnext50_32x4d(
     *, weights: Optional[ResNeXt50_32X4D_Weights] = None, progress: bool = True, **kwargs: Any
-) -> ResNet:
+) -> sResnet:
     """ResNeXt-50 32x4d model from
     `Aggregated Residual Transformation for Deep Neural Networks <https://arxiv.org/abs/1611.05431>`_.
 
@@ -1055,7 +898,7 @@ def resnext50_32x4d(
             weights are used.
         progress (bool, optional): If True, displays a progress bar of the
             download to stderr. Default is True.
-        **kwargs: parameters passed to the ``torchvision.models.resnet.ResNet``
+        **kwargs: parameters passed to the ``torchvision.models.resnet.sResnet``
             base class. Please refer to the `source code
             <https://github.com/pytorch/vision/blob/main/torchvision/models/resnet.py>`_
             for more details about this class.
@@ -1066,14 +909,14 @@ def resnext50_32x4d(
 
     _ovewrite_named_param(kwargs, "groups", 32)
     _ovewrite_named_param(kwargs, "width_per_group", 4)
-    return _resnet(Bottleneck, [3, 4, 6, 3], weights, progress, **kwargs)
+    return _sresnet(Bottleneck, [3, 4, 6, 3], weights, progress, **kwargs)
 
 
 @register_model()
 @handle_legacy_interface(weights=("pretrained", ResNeXt101_32X8D_Weights.IMAGENET1K_V1))
-def resnext101_32x8d(
+def sresnext101_32x8d(
     *, weights: Optional[ResNeXt101_32X8D_Weights] = None, progress: bool = True, **kwargs: Any
-) -> ResNet:
+) -> sResnet:
     """ResNeXt-101 32x8d model from
     `Aggregated Residual Transformation for Deep Neural Networks <https://arxiv.org/abs/1611.05431>`_.
 
@@ -1085,7 +928,7 @@ def resnext101_32x8d(
             weights are used.
         progress (bool, optional): If True, displays a progress bar of the
             download to stderr. Default is True.
-        **kwargs: parameters passed to the ``torchvision.models.resnet.ResNet``
+        **kwargs: parameters passed to the ``torchvision.models.resnet.sResnet``
             base class. Please refer to the `source code
             <https://github.com/pytorch/vision/blob/main/torchvision/models/resnet.py>`_
             for more details about this class.
@@ -1096,14 +939,14 @@ def resnext101_32x8d(
 
     _ovewrite_named_param(kwargs, "groups", 32)
     _ovewrite_named_param(kwargs, "width_per_group", 8)
-    return _resnet(Bottleneck, [3, 4, 23, 3], weights, progress, **kwargs)
+    return _sresnet(Bottleneck, [3, 4, 23, 3], weights, progress, **kwargs)
 
 
 @register_model()
 @handle_legacy_interface(weights=("pretrained", ResNeXt101_64X4D_Weights.IMAGENET1K_V1))
-def resnext101_64x4d(
+def sresnext101_64x4d(
     *, weights: Optional[ResNeXt101_64X4D_Weights] = None, progress: bool = True, **kwargs: Any
-) -> ResNet:
+) -> sResnet:
     """ResNeXt-101 64x4d model from
     `Aggregated Residual Transformation for Deep Neural Networks <https://arxiv.org/abs/1611.05431>`_.
 
@@ -1115,7 +958,7 @@ def resnext101_64x4d(
             weights are used.
         progress (bool, optional): If True, displays a progress bar of the
             download to stderr. Default is True.
-        **kwargs: parameters passed to the ``torchvision.models.resnet.ResNet``
+        **kwargs: parameters passed to the ``torchvision.models.resnet.sResnet``
             base class. Please refer to the `source code
             <https://github.com/pytorch/vision/blob/main/torchvision/models/resnet.py>`_
             for more details about this class.
@@ -1126,72 +969,72 @@ def resnext101_64x4d(
 
     _ovewrite_named_param(kwargs, "groups", 64)
     _ovewrite_named_param(kwargs, "width_per_group", 4)
-    return _resnet(Bottleneck, [3, 4, 23, 3], weights, progress, **kwargs)
+    return _sresnet(Bottleneck, [3, 4, 23, 3], weights, progress, **kwargs)
 
 
 @register_model()
-@handle_legacy_interface(weights=("pretrained", Wide_ResNet50_2_Weights.IMAGENET1K_V1))
-def wide_resnet50_2(
-    *, weights: Optional[Wide_ResNet50_2_Weights] = None, progress: bool = True, **kwargs: Any
-) -> ResNet:
-    """Wide ResNet-50-2 model from
+@handle_legacy_interface(weights=("pretrained", Wide_sResnet50_2_Weights.IMAGENET1K_V1))
+def wide_sresnet50_2(
+    *, weights: Optional[Wide_sResnet50_2_Weights] = None, progress: bool = True, **kwargs: Any
+) -> sResnet:
+    """Wide sResnet-50-2 model from
     `Wide Residual Networks <https://arxiv.org/abs/1605.07146>`_.
 
-    The model is the same as ResNet except for the bottleneck number of channels
+    The model is the same as sResnet except for the bottleneck number of channels
     which is twice larger in every block. The number of channels in outer 1x1
-    convolutions is the same, e.g. last block in ResNet-50 has 2048-512-2048
-    channels, and in Wide ResNet-50-2 has 2048-1024-2048.
+    convolutions is the same, e.g. last block in sResnet-50 has 2048-512-2048
+    channels, and in Wide sResnet-50-2 has 2048-1024-2048.
 
     Args:
-        weights (:class:`~torchvision.models.Wide_ResNet50_2_Weights`, optional): The
+        weights (:class:`~torchvision.models.Wide_sResnet50_2_Weights`, optional): The
             pretrained weights to use. See
-            :class:`~torchvision.models.Wide_ResNet50_2_Weights` below for
+            :class:`~torchvision.models.Wide_sResnet50_2_Weights` below for
             more details, and possible values. By default, no pre-trained
             weights are used.
         progress (bool, optional): If True, displays a progress bar of the
             download to stderr. Default is True.
-        **kwargs: parameters passed to the ``torchvision.models.resnet.ResNet``
+        **kwargs: parameters passed to the ``torchvision.models.resnet.sResnet``
             base class. Please refer to the `source code
             <https://github.com/pytorch/vision/blob/main/torchvision/models/resnet.py>`_
             for more details about this class.
-    .. autoclass:: torchvision.models.Wide_ResNet50_2_Weights
+    .. autoclass:: torchvision.models.Wide_sResnet50_2_Weights
         :members:
     """
-    weights = Wide_ResNet50_2_Weights.verify(weights)
+    weights = Wide_sResnet50_2_Weights.verify(weights)
 
     _ovewrite_named_param(kwargs, "width_per_group", 64 * 2)
-    return _resnet(Bottleneck, [3, 4, 6, 3], weights, progress, **kwargs)
+    return _sresnet(Bottleneck, [3, 4, 6, 3], weights, progress, **kwargs)
 
 
 @register_model()
-@handle_legacy_interface(weights=("pretrained", Wide_ResNet101_2_Weights.IMAGENET1K_V1))
-def wide_resnet101_2(
-    *, weights: Optional[Wide_ResNet101_2_Weights] = None, progress: bool = True, **kwargs: Any
-) -> ResNet:
-    """Wide ResNet-101-2 model from
+@handle_legacy_interface(weights=("pretrained", Wide_sResnet101_2_Weights.IMAGENET1K_V1))
+def wide_sresnet101_2(
+    *, weights: Optional[Wide_sResnet101_2_Weights] = None, progress: bool = True, **kwargs: Any
+) -> sResnet:
+    """Wide sResnet-101-2 model from
     `Wide Residual Networks <https://arxiv.org/abs/1605.07146>`_.
 
-    The model is the same as ResNet except for the bottleneck number of channels
+    The model is the same as sResnet except for the bottleneck number of channels
     which is twice larger in every block. The number of channels in outer 1x1
-    convolutions is the same, e.g. last block in ResNet-101 has 2048-512-2048
-    channels, and in Wide ResNet-101-2 has 2048-1024-2048.
+    convolutions is the same, e.g. last block in sResnet-101 has 2048-512-2048
+    channels, and in Wide sResnet-101-2 has 2048-1024-2048.
 
     Args:
-        weights (:class:`~torchvision.models.Wide_ResNet101_2_Weights`, optional): The
+        weights (:class:`~torchvision.models.Wide_sResnet101_2_Weights`, optional): The
             pretrained weights to use. See
-            :class:`~torchvision.models.Wide_ResNet101_2_Weights` below for
+            :class:`~torchvision.models.Wide_sResnet101_2_Weights` below for
             more details, and possible values. By default, no pre-trained
             weights are used.
         progress (bool, optional): If True, displays a progress bar of the
             download to stderr. Default is True.
-        **kwargs: parameters passed to the ``torchvision.models.resnet.ResNet``
+        **kwargs: parameters passed to the ``torchvision.models.resnet.sResnet``
             base class. Please refer to the `source code
             <https://github.com/pytorch/vision/blob/main/torchvision/models/resnet.py>`_
             for more details about this class.
-    .. autoclass:: torchvision.models.Wide_ResNet101_2_Weights
+    .. autoclass:: torchvision.models.Wide_sResnet101_2_Weights
         :members:
     """
-    weights = Wide_ResNet101_2_Weights.verify(weights)
+    weights = Wide_sResnet101_2_Weights.verify(weights)
 
     _ovewrite_named_param(kwargs, "width_per_group", 64 * 2)
-    return _resnet(Bottleneck, [3, 4, 23, 3], weights, progress, **kwargs)
+    return _sresnet(Bottleneck, [3, 4, 23, 3], weights, progress, **kwargs)

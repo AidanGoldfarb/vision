@@ -14,6 +14,7 @@ from .vgg import *
 from .vision_transformer import *
 from .swin_transformer import *
 from .maxvit import *
+
 from .myresnet import *
 from .mygooglenet import *
 from .mydensenet import *
@@ -26,6 +27,12 @@ from .pgooglenet import *
 from .pmobilenetv2 import *
 from .psqueezenet import *
 from .presnet import *
+from .salexnet import *
+from .sdensenet import *
+from .sgooglenet import *
+from .smobilenetv2 import *
+from .ssqueezenet import *
+from .sresnet import *
 from . import detection, optical_flow, quantization, segmentation, video
 
 # The Weights and WeightsEnum are developer-facing utils that we make public for

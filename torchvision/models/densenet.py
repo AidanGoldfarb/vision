@@ -153,6 +153,9 @@ class DenseNet(nn.Module):
 
     def __init__(
         self,
+        timed,
+        sync,
+        cust,
         growth_rate: int = 32,
         block_config: Tuple[int, int, int, int] = (6, 12, 24, 16),
         num_init_features: int = 64,
@@ -164,6 +167,10 @@ class DenseNet(nn.Module):
 
         super().__init__()
         _log_api_usage_once(self)
+
+        self.timed = timed
+        self.sync = sync
+        self.cust = cust
 
         # First convolution
         self.features = nn.Sequential(
@@ -198,6 +205,15 @@ class DenseNet(nn.Module):
         # Final batch norm
         self.features.add_module("norm5", nn.BatchNorm2d(num_features))
 
+        if cust:
+            self.featurescomp = nn.Sequential()
+            for i,module in enumerate(self.features):
+                if i in [4,6]: #lst from god
+                    self.featurescomp.add_module("uselessAPI"+str(i+1),torch.compile(module))
+                else:
+                    self.featurescomp.add_module("uselessAPI"+str(i+1),module)
+            self.features= self.featurescomp
+        
         # Linear layer
         self.classifier = nn.Linear(num_features, num_classes)
 
@@ -211,21 +227,9 @@ class DenseNet(nn.Module):
             elif isinstance(m, nn.Linear):
                 nn.init.constant_(m.bias, 0)
 
-    def forward(self, x: Tensor) -> Tensor:
+    def _forward_timed_sync(self, x: Tensor) -> Tensor:
         torch.cuda.synchronize()
-        # features = self.features(x)
-        # out = F.relu(features, inplace=True)
-        # out = F.adaptive_avg_pool2d(out, (1, 1))
-        # out = torch.flatten(out, 1)
-        # out = self.classifier(out)
-
-
         times = []
-
-        # st = time.perf_counter_ns()
-        # features = self.features(x)
-        # et = time.perf_counter_ns()
-        # times.append(et-st)
         for module in self.features:
             st = time.perf_counter_ns()
             x = module(x)
@@ -245,13 +249,15 @@ class DenseNet(nn.Module):
         torch.cuda.synchronize()
         et = time.perf_counter_ns()
         times.append(et-st)
-
+        
+        
         st = time.perf_counter_ns()
         out = torch.flatten(out, 1)
         torch.cuda.synchronize()
         et = time.perf_counter_ns()
         times.append(et-st)
-
+        
+        
         st = time.perf_counter_ns()
         out = self.classifier(out)
         torch.cuda.synchronize()
@@ -259,6 +265,82 @@ class DenseNet(nn.Module):
         times.append(et-st)
 
         return out, times
+
+    def _forward_timed(self, x: Tensor) -> Tensor:
+        # features = self.features(x)
+        # out = F.relu(features, inplace=True)
+        # out = F.adaptive_avg_pool2d(out, (1, 1))
+        # out = torch.flatten(out, 1)
+        # out = self.classifier(out)
+
+        times = []
+        for module in self.features:
+            st = time.perf_counter_ns()
+            x = module(x)
+            et = time.perf_counter_ns()
+            times.append(et-st)
+        features = x
+
+        st = time.perf_counter_ns()
+        out = F.relu(features, inplace=True)
+        et = time.perf_counter_ns()
+        times.append(et-st)
+
+        st = time.perf_counter_ns()
+        out = F.adaptive_avg_pool2d(out, (1, 1))
+        et = time.perf_counter_ns()
+        times.append(et-st)
+
+        st = time.perf_counter_ns()
+        out = torch.flatten(out, 1)
+        et = time.perf_counter_ns()
+        times.append(et-st)
+
+        st = time.perf_counter_ns()
+        out = self.classifier(out)
+        et = time.perf_counter_ns()
+        times.append(et-st)
+
+        return out, times
+
+    def _forward_sync(self, x: Tensor) -> Tensor:
+        for module in self.features:
+            x = module(x)
+            torch.cuda.synchronize()
+        features = x
+
+        out = F.relu(features, inplace=True)
+        torch.cuda.synchronize()
+
+        out = F.adaptive_avg_pool2d(out, (1, 1))
+        torch.cuda.synchronize()
+
+        out = torch.flatten(out, 1)
+        torch.cuda.synchronize()
+        
+        return out, None
+    
+    def _forward_pure(self, x: Tensor) -> Tensor:
+        for module in self.features:
+            x = module(x)
+        features = x
+
+        out = F.relu(features, inplace=True)
+        out = F.adaptive_avg_pool2d(out, (1, 1))
+        out = torch.flatten(out, 1)
+        out = self.classifier(out)
+
+        return out, None
+
+    def forward(self, x: Tensor) -> Tensor:
+        if self.timed and self.sync:
+            return self._forward_timed_sync(x)
+        elif self.timed:
+            return self._forward_timed(x)
+        elif self.sync:
+            return self._forward_sync(x)
+        else:
+            return self._forward_pure(x)
 
 
 def _load_state_dict(model: nn.Module, weights: WeightsEnum, progress: bool) -> None:
@@ -281,6 +363,9 @@ def _load_state_dict(model: nn.Module, weights: WeightsEnum, progress: bool) -> 
 
 
 def _densenet(
+    timed: bool,
+    sync: bool,
+    cust: bool,
     growth_rate: int,
     block_config: Tuple[int, int, int, int],
     num_init_features: int,
@@ -291,7 +376,7 @@ def _densenet(
     if weights is not None:
         _ovewrite_named_param(kwargs, "num_classes", len(weights.meta["categories"]))
 
-    model = DenseNet(growth_rate, block_config, num_init_features, **kwargs)
+    model = DenseNet(timed,sync,cust,growth_rate, block_config, num_init_features, **kwargs)
 
     if weights is not None:
         _load_state_dict(model=model, weights=weights, progress=progress)
@@ -389,7 +474,7 @@ class DenseNet201_Weights(WeightsEnum):
 
 @register_model()
 @handle_legacy_interface(weights=("pretrained", DenseNet121_Weights.IMAGENET1K_V1))
-def densenet121(*, weights: Optional[DenseNet121_Weights] = None, progress: bool = True, **kwargs: Any) -> DenseNet:
+def densenet121(timed,sync,cust,*, weights: Optional[DenseNet121_Weights] = None, progress: bool = True, **kwargs: Any) -> DenseNet:
     r"""Densenet-121 model from
     `Densely Connected Convolutional Networks <https://arxiv.org/abs/1608.06993>`_.
 
@@ -410,7 +495,7 @@ def densenet121(*, weights: Optional[DenseNet121_Weights] = None, progress: bool
     """
     weights = DenseNet121_Weights.verify(weights)
 
-    return _densenet(32, (6, 12, 24, 16), 64, weights, progress, **kwargs)
+    return _densenet(timed,sync,cust,32, (6, 12, 24, 16), 64, weights, progress, **kwargs)
 
 
 @register_model()

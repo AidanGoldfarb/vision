@@ -16,7 +16,7 @@ __all__ = ["AlexNet", "AlexNet_Weights", "alexnet"]
 
 
 class AlexNet(nn.Module):
-    def __init__(self, num_classes: int = 1000, dropout: float = 0.5) -> None:
+    def __init__(self, timed,sync,cust, num_classes: int = 1000, dropout: float = 0.5) -> None:
         super().__init__()
         _log_api_usage_once(self)
         self.features = nn.Sequential(
@@ -46,13 +46,34 @@ class AlexNet(nn.Module):
         )
 
 
+    def _forward_timed(self, x: torch.Tensor) -> torch.Tensor:
+        times = []
+        
+        for module in self.features:
+            st = time.perf_counter_ns()
+            x = module(x)
+            et = time.perf_counter_ns()
+            times.append(et-st)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # x = self.features(x)
-        # x = self.avgpool(x)
-        # x = torch.flatten(x, 1)
-        # x = self.classifier(x)
-        # return x
+        st = time.perf_counter_ns()
+        x = self.avgpool(x)
+        et = time.perf_counter_ns()
+        times.append(et-st)
+
+        st = time.perf_counter_ns()
+        x = torch.flatten(x, 1)
+        et = time.perf_counter_ns()
+        times.append(et-st)
+
+        st = time.perf_counter_ns()
+        x = self.classifier(x)
+        et = time.perf_counter_ns()
+        times.append(et-st)
+
+        return x,times
+
+    def _forward_timed_sync(self, x: torch.Tensor) -> torch.Tensor:
+        torch.cuda.synchronize()
         times = []
         
         for module in self.features:
@@ -68,8 +89,11 @@ class AlexNet(nn.Module):
         et = time.perf_counter_ns()
         times.append(et-st)
 
+        st = time.perf_counter_ns()
         x = torch.flatten(x, 1)
         torch.cuda.synchronize()
+        et = time.perf_counter_ns()
+        times.append(et-st)
 
         st = time.perf_counter_ns()
         x = self.classifier(x)
@@ -79,6 +103,42 @@ class AlexNet(nn.Module):
 
         return x,times
 
+    def _forward_sync(self, x: torch.Tensor) -> torch.Tensor:
+        torch.cuda.synchronize()
+
+        for module in self.features:
+            x = module(x)
+            torch.cuda.synchronize()
+
+        x = self.avgpool(x)
+        torch.cuda.synchronize()
+
+        x = torch.flatten(x, 1)
+        torch.cuda.synchronize()
+
+        x = self.classifier(x)
+        torch.cuda.synchronize()
+
+        return x,None
+    
+    def _forward_pure(self, x: torch.Tensor) -> torch.Tensor:
+        for module in self.features:
+            x = module(x)
+        x = self.avgpool(x)
+        x = torch.flatten(x, 1)
+        x = self.classifier(x)
+
+        return x,None
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor: 
+        if self.timed and self.sync:
+                return self._forward_timed_sync(x)
+        elif self.timed:
+            return self._forward_timed(x)
+        elif self.sync:
+            return self._forward_sync(x)
+        else:
+            return self._forward_pure(x)
 
 class AlexNet_Weights(WeightsEnum):
     IMAGENET1K_V1 = Weights(
@@ -107,7 +167,7 @@ class AlexNet_Weights(WeightsEnum):
 
 @register_model()
 @handle_legacy_interface(weights=("pretrained", AlexNet_Weights.IMAGENET1K_V1))
-def alexnet(*, weights: Optional[AlexNet_Weights] = None, progress: bool = True, **kwargs: Any) -> AlexNet:
+def alexnet(timed,sync,cust,*, weights: Optional[AlexNet_Weights] = None, progress: bool = True, **kwargs: Any) -> AlexNet:
     """AlexNet model architecture from `One weird trick for parallelizing convolutional neural networks <https://arxiv.org/abs/1404.5997>`__.
 
     .. note::
@@ -139,8 +199,7 @@ def alexnet(*, weights: Optional[AlexNet_Weights] = None, progress: bool = True,
     if weights is not None:
         _ovewrite_named_param(kwargs, "num_classes", len(weights.meta["categories"]))
 
-    model = AlexNet(**kwargs)
-
+    model = AlexNet(timed,sync,cust,**kwargs)
     if weights is not None:
         model.load_state_dict(weights.get_state_dict(progress=progress, check_hash=True))
 

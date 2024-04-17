@@ -14,7 +14,7 @@ from ._meta import _IMAGENET_CATEGORIES
 from ._utils import _make_divisible, _ovewrite_named_param, handle_legacy_interface
 
 
-__all__ = ["myMobileNetV2", "myMobileNet_V2_Weights", "mymobilenet_v2"]
+__all__ = ["sMobileNetV2", "sMobileNet_V2_Weights", "smobilenet_v2"]
 
 
 # necessary for backwards compatibility
@@ -66,11 +66,9 @@ class InvertedResidual(nn.Module):
             return self.conv(x)
 
 
-class myMobileNetV2(nn.Module):
+class sMobileNetV2(nn.Module):
     def __init__(
         self,
-        timed,
-        sync,
         num_classes: int = 1000,
         width_mult: float = 1.0,
         inverted_residual_setting: Optional[List[List[int]]] = None,
@@ -88,7 +86,7 @@ class myMobileNetV2(nn.Module):
             inverted_residual_setting: Network structure
             round_nearest (int): Round the number of channels in each layer to be a multiple of this number
             Set to 1 to turn off rounding
-            block: Module specifying inverted residual building block for mobilenet
+            block: Module specifying inverted residual building block for smobilenet
             norm_layer: Module specifying the normalization layer to use
             dropout (float): The droupout probability
 
@@ -144,12 +142,6 @@ class myMobileNetV2(nn.Module):
         )
         # make it nn.Sequential
         self.features = nn.Sequential(*features)
-        self.featurescomp = nn.Sequential()
-        for i,module in enumerate(features):
-            if i in [9,10,12,13,15,16]: #lst from god
-                self.featurescomp.add_module("uselessAPI"+str(i+1),torch.compile(module))
-            else:
-                self.featurescomp.add_module("uselessAPI"+str(i+1),module)
 
         # building classifier
         self.classifier = nn.Sequential(
@@ -174,7 +166,6 @@ class myMobileNetV2(nn.Module):
         torch.cuda.synchronize()
         # This exists since TorchScript doesn't support inheritance, so the superclass method
         # (this one) needs to have a name other than `forward` that can be accessed in a subclass
-        
         # x = self.features(x)
         # # Cannot use "squeeze" as batch-size can be 1
         # x = nn.functional.adaptive_avg_pool2d(x, (1, 1))
@@ -182,43 +173,31 @@ class myMobileNetV2(nn.Module):
         # x = self.classifier(x)
         times = []
 
-        for module in self.featurescomp:
-            if timed:
-                st = time.perf_counter_ns()
-            x = module(x)
-            if sync:
-                torch.cuda.synchronize()
-            if timed:
-                et = time.perf_counter_ns()
-                times.append(et-st)
-
-        if timed:
+        for module in self.features:
             st = time.perf_counter_ns()
+            x = module(x)
+            torch.cuda.synchronize()
+            et = time.perf_counter_ns()
+            times.append(et-st)
+
+        st = time.perf_counter_ns()
         # Cannot use "squeeze" as batch-size can be 1
         x = nn.functional.adaptive_avg_pool2d(x, (1, 1))
-        if sync:
-            torch.cuda.synchronize()
-        if timed:
-            et = time.perf_counter_ns()
-            times.append(et-st)
+        torch.cuda.synchronize()
+        et = time.perf_counter_ns()
+        times.append(et-st)
 
-        if timed:
-            st = time.perf_counter_ns()
+        st = time.perf_counter_ns()
         x = torch.flatten(x, 1)
-        if sync:
-            torch.cuda.synchronize()
-        if timed:
-            et = time.perf_counter_ns()
-            times.append(et-st)
+        torch.cuda.synchronize()
+        et = time.perf_counter_ns()
+        times.append(et-st)
 
-        if timed:
-            st = time.perf_counter_ns()
+        st = time.perf_counter_ns()
         x = self.classifier(x)
-        if sync:
-            torch.cuda.synchronize()
-        if timed:
-            et = time.perf_counter_ns()
-            times.append(et-st)
+        torch.cuda.synchronize()
+        et = time.perf_counter_ns()
+        times.append(et-st)
         
         return x,times
 
@@ -233,7 +212,7 @@ _COMMON_META = {
 }
 
 
-class myMobileNet_V2_Weights(WeightsEnum):
+class sMobileNet_V2_Weights(WeightsEnum):
     IMAGENET1K_V1 = Weights(
         url="https://download.pytorch.org/models/mobilenet_v2-b0353104.pth",
         transforms=partial(ImageClassification, crop_size=224),
@@ -276,35 +255,35 @@ class myMobileNet_V2_Weights(WeightsEnum):
 
 
 @register_model()
-@handle_legacy_interface(weights=("pretrained", myMobileNet_V2_Weights.IMAGENET1K_V1))
-def mymobilenet_v2(
-    *, weights: Optional[myMobileNet_V2_Weights] = None, progress: bool = True, **kwargs: Any
-) -> myMobileNetV2:
-    """myMobileNetV2 architecture from the `myMobileNetV2: Inverted Residuals and Linear
+@handle_legacy_interface(weights=("pretrained", sMobileNet_V2_Weights.IMAGENET1K_V1))
+def smobilenet_v2(
+    *, weights: Optional[sMobileNet_V2_Weights] = None, progress: bool = True, **kwargs: Any
+) -> sMobileNetV2:
+    """sMobileNetV2 architecture from the `sMobileNetV2: Inverted Residuals and Linear
     Bottlenecks <https://arxiv.org/abs/1801.04381>`_ paper.
 
     Args:
-        weights (:class:`~torchvision.models.myMobileNet_V2_Weights`, optional): The
+        weights (:class:`~torchvision.models.sMobileNet_V2_Weights`, optional): The
             pretrained weights to use. See
-            :class:`~torchvision.models.myMobileNet_V2_Weights` below for
+            :class:`~torchvision.models.sMobileNet_V2_Weights` below for
             more details, and possible values. By default, no pre-trained
             weights are used.
         progress (bool, optional): If True, displays a progress bar of the
             download to stderr. Default is True.
-        **kwargs: parameters passed to the ``torchvision.models.mobilenetv2.myMobileNetV2``
+        **kwargs: parameters passed to the ``torchvision.models.mobilenetv2.sMobileNetV2``
             base class. Please refer to the `source code
             <https://github.com/pytorch/vision/blob/main/torchvision/models/mobilenetv2.py>`_
             for more details about this class.
 
-    .. autoclass:: torchvision.models.myMobileNet_V2_Weights
+    .. autoclass:: torchvision.models.sMobileNet_V2_Weights
         :members:
     """
-    weights = myMobileNet_V2_Weights.verify(weights)
+    weights = sMobileNet_V2_Weights.verify(weights)
 
     if weights is not None:
         _ovewrite_named_param(kwargs, "num_classes", len(weights.meta["categories"]))
 
-    model = myMobileNetV2(**kwargs)
+    model = sMobileNetV2(**kwargs)
 
     if weights is not None:
         model.load_state_dict(weights.get_state_dict(progress=progress, check_hash=True))

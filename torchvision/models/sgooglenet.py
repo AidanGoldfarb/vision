@@ -17,25 +17,22 @@ from ._meta import _IMAGENET_CATEGORIES
 from ._utils import _ovewrite_named_param, handle_legacy_interface
 
 
-__all__ = ["GoogLeNet", "GoogLeNetOutputs", "_GoogLeNetOutputs", "GoogLeNet_Weights", "googlenet"]
+__all__ = ["sGoogLeNet", "sGoogLeNetOutputs", "_sGoogLeNetOutputs", "sGoogLeNet_Weights", "sgooglenet"]
 
 
-GoogLeNetOutputs = namedtuple("GoogLeNetOutputs", ["logits", "aux_logits2", "aux_logits1"])
-GoogLeNetOutputs.__annotations__ = {"logits": Tensor, "aux_logits2": Optional[Tensor], "aux_logits1": Optional[Tensor]}
+sGoogLeNetOutputs = namedtuple("sGoogLeNetOutputs", ["logits", "aux_logits2", "aux_logits1"])
+sGoogLeNetOutputs.__annotations__ = {"logits": Tensor, "aux_logits2": Optional[Tensor], "aux_logits1": Optional[Tensor]}
 
 # Script annotations failed with _GoogleNetOutputs = namedtuple ...
-# _GoogLeNetOutputs set here for backwards compat
-_GoogLeNetOutputs = GoogLeNetOutputs
+# _sGoogLeNetOutputs set here for backwards compat
+_sGoogLeNetOutputs = sGoogLeNetOutputs
 
 
-class GoogLeNet(nn.Module):
+class sGoogLeNet(nn.Module):
     __constants__ = ["aux_logits", "transform_input"]
 
     def __init__(
         self,
-        timed,
-        sync,
-        cust,
         num_classes: int = 1000,
         aux_logits: bool = True,
         transform_input: bool = False,
@@ -85,21 +82,6 @@ class GoogLeNet(nn.Module):
         self.inception5a = inception_block(832, 256, 160, 320, 32, 128, 128)
         self.inception5b = inception_block(832, 384, 192, 384, 48, 128, 128)
 
-        self.layers = [self.conv1,self.maxpool1,self.conv2,self.conv3,self.maxpool2,self.inception3a,
-            self.inception3b,self.maxpool3,self.inception4a,self.inception4b,self.inception4c,self.inception4d,self.inception4e,
-            self.maxpool4,self.inception5a,self.inception5b]
-
-
-        if cust:
-            self.layerscomp = []
-            for i,layer in enumerate(self.layers):
-                if i in [5,6,8,9,10,11,12,14,15]: #lst from god
-                    self.layerscomp.append(torch.compile(layer))
-                else:
-                    self.layerscomp.append(layer)
-            self.layers = self.layerscomp
-
-
         if aux_logits:
             self.aux1 = inception_aux_block(512, num_classes, dropout=dropout_aux)
             self.aux2 = inception_aux_block(528, num_classes, dropout=dropout_aux)
@@ -127,45 +109,235 @@ class GoogLeNet(nn.Module):
             x = torch.cat((x_ch0, x_ch1, x_ch2), 1)
         return x
 
-    def _forward_timed_sync(self, x: Tensor) -> Tuple[Tensor, Optional[Tensor], Optional[Tensor]]:
-        times = []
-        for layer in self.layerscomp:
-            st = time.perf_counter_ns()
-            x = layer(x)
-            torch.cuda.synchronize()
-            et = time.perf_counter_ns()
-            times.append(et-st)
-        return x, None, None, times
-
-    def _forward_timed(self, x: Tensor) -> Tuple[Tensor, Optional[Tensor], Optional[Tensor]]:
-        times = []
-        for layer in self.layerscomp:
-            st = time.perf_counter_ns()
-            x = layer(x)
-            et = time.perf_counter_ns()
-            times.append(et-st)
-        return x, None, None, times
-
-    def _forward_sync(self, x: Tensor) -> Tuple[Tensor, Optional[Tensor], Optional[Tensor]]:
-        for layer in self.layerscomp:
-            x = layer(x)
-            torch.cuda.synchronize()
-        return x, None, None, None 
-
-    def _forward_pure(self, x: Tensor) -> Tuple[Tensor, Optional[Tensor], Optional[Tensor]]:
-        for layer in self.layerscomp:
-            x = layer(x)
-        return x, None, None, None 
-
     def _forward(self, x: Tensor) -> Tuple[Tensor, Optional[Tensor], Optional[Tensor]]:
-        if self.timed and self.sync:
-            return self._forward_timed_sync(x)
-        elif self.timed:
-            return self._forward_timed(x)
-        elif self.sync:
-            return self._forward_sync(x)
+        torch.cuda.synchronize()
+        # # N x 3 x 224 x 224
+        # x = self.conv1(x)
+        # # N x 64 x 112 x 112
+        # x = self.maxpool1(x)
+        # # N x 64 x 56 x 56
+        # x = self.conv2(x)
+        # # N x 64 x 56 x 56
+        # x = self.conv3(x)
+        # # N x 192 x 56 x 56
+        # x = self.maxpool2(x)
+
+        # # N x 192 x 28 x 28
+        # x = self.inception3a(x)
+        # # N x 256 x 28 x 28
+        # x = self.inception3b(x)
+        # # N x 480 x 28 x 28
+        # x = self.maxpool3(x)
+        # # N x 480 x 14 x 14
+        # x = self.inception4a(x)
+        # # N x 512 x 14 x 14
+        # aux1: Optional[Tensor] = None
+        # if self.aux1 is not None:
+        #     if self.training:
+        #         aux1 = self.aux1(x)
+
+        # x = self.inception4b(x)
+        # # N x 512 x 14 x 14
+        # x = self.inception4c(x)
+        # # N x 512 x 14 x 14
+        # x = self.inception4d(x)
+        # # N x 528 x 14 x 14
+        # aux2: Optional[Tensor] = None
+        # if self.aux2 is not None:
+        #     if self.training:
+        #         aux2 = self.aux2(x)
+
+        # x = self.inception4e(x)
+        # # N x 832 x 14 x 14
+        # x = self.maxpool4(x)
+        # # N x 832 x 7 x 7
+        # x = self.inception5a(x)
+        # # N x 832 x 7 x 7
+        # x = self.inception5b(x)
+        # # N x 1024 x 7 x 7
+
+        # x = self.avgpool(x)
+        # # N x 1024 x 1 x 1
+        # x = torch.flatten(x, 1)
+        # # N x 1024
+        # x = self.dropout(x)
+        # x = self.fc(x)
+        # N x 1000 (num_classes)
+
+        times = []
+
+        st = time.perf_counter_ns()
+        # N x 3 x 224 x 224
+        x = self.conv1(x)
+        torch.cuda.synchronize()
+        et = time.perf_counter_ns()
+        times.append(et-st)
+
+        #x = self.conv1fun(x)
+
+        st = time.perf_counter_ns()
+        # N x 64 x 112 x 112
+        x = self.maxpool1(x)
+        torch.cuda.synchronize()
+        et = time.perf_counter_ns()
+        times.append(et-st)
+
+        st = time.perf_counter_ns()
+        # N x 64 x 56 x 56
+        x = self.conv2(x)
+        torch.cuda.synchronize()
+        et = time.perf_counter_ns()
+        times.append(et-st)
+
+        st = time.perf_counter_ns()
+        # N x 64 x 56 x 56
+        x = self.conv3(x)
+        torch.cuda.synchronize()
+        et = time.perf_counter_ns()
+        times.append(et-st)
+
+        st = time.perf_counter_ns()
+        # N x 192 x 56 x 56
+        x = self.maxpool2(x)
+        torch.cuda.synchronize()
+        et = time.perf_counter_ns()
+        times.append(et-st)
+
+        st = time.perf_counter_ns()
+        # N x 192 x 28 x 28
+        x = self.inception3a(x)
+        torch.cuda.synchronize()
+        et = time.perf_counter_ns()
+        times.append(et-st)
+
+        st = time.perf_counter_ns()
+        # N x 256 x 28 x 28
+        x = self.inception3b(x)
+        torch.cuda.synchronize()
+        et = time.perf_counter_ns()
+        times.append(et-st)
+
+        st = time.perf_counter_ns()
+        # N x 480 x 28 x 28
+        x = self.maxpool3(x)
+        torch.cuda.synchronize()
+        et = time.perf_counter_ns()
+        times.append(et-st)
+
+        st = time.perf_counter_ns()
+        # N x 480 x 14 x 14
+        x = self.inception4a(x)
+        torch.cuda.synchronize()
+        et = time.perf_counter_ns()
+        times.append(et-st)
+        
+
+        # N x 512 x 14 x 14
+        aux1: Optional[Tensor] = None
+        if self.aux1 is not None:
+            if self.training:
+                aux1 = self.aux1(x)
+
+        st = time.perf_counter_ns()
+        x = self.inception4b(x)
+        torch.cuda.synchronize()
+        et = time.perf_counter_ns()
+        times.append(et-st)
+
+        st = time.perf_counter_ns()
+        # N x 512 x 14 x 14
+        x = self.inception4c(x)
+        torch.cuda.synchronize()
+        et = time.perf_counter_ns()
+        times.append(et-st)
+
+        st = time.perf_counter_ns()
+        # N x 512 x 14 x 14
+        x = self.inception4d(x)
+        torch.cuda.synchronize()
+        et = time.perf_counter_ns()
+        times.append(et-st)
+
+        # N x 528 x 14 x 14
+        aux2: Optional[Tensor] = None
+        if self.aux2 is not None:
+            if self.training:
+                aux2 = self.aux2(x)
+
+        st = time.perf_counter_ns()
+        x = self.inception4e(x)
+        torch.cuda.synchronize()
+        et = time.perf_counter_ns()
+        times.append(et-st)
+
+        st = time.perf_counter_ns()
+        # N x 832 x 14 x 14
+        x = self.maxpool4(x)
+        torch.cuda.synchronize()
+        et = time.perf_counter_ns()
+        times.append(et-st)
+
+        st = time.perf_counter_ns()
+        # N x 832 x 7 x 7
+        x = self.inception5a(x)
+        torch.cuda.synchronize()
+        et = time.perf_counter_ns()
+        times.append(et-st)
+
+        st = time.perf_counter_ns()
+        # N x 832 x 7 x 7
+        x = self.inception5b(x)
+        torch.cuda.synchronize()
+        et = time.perf_counter_ns()
+        times.append(et-st)
+
+        st = time.perf_counter_ns()
+        # N x 1024 x 7 x 7
+        x = self.avgpool(x)
+        torch.cuda.synchronize()
+        et = time.perf_counter_ns()
+        times.append(et-st)
+        
+        st = time.perf_counter_ns()
+        # N x 1024 x 1 x 1
+        x = torch.flatten(x, 1)
+        torch.cuda.synchronize()
+        et = time.perf_counter_ns()
+        times.append(et-st)
+
+        st = time.perf_counter_ns()
+        # N x 1024
+        x = self.dropout(x)
+        torch.cuda.synchronize()
+        et = time.perf_counter_ns()
+        times.append(et-st)
+
+        st = time.perf_counter_ns()
+        x = self.fc(x)
+        torch.cuda.synchronize()
+        et = time.perf_counter_ns()
+        times.append(et-st)
+
+        # N x 1000 (num_classes)
+        return x, None, None, times
+
+    @torch.jit.unused
+    def eager_outputs(self, x: Tensor, aux2: Tensor, aux1: Optional[Tensor]) -> sGoogLeNetOutputs:
+        if self.training and self.aux_logits:
+            return _sGoogLeNetOutputs(x, aux2, aux1)
         else:
-            return self._forward_pure(x)
+            return x  # type: ignore[return-value]
+
+    def forward(self, x: Tensor) -> sGoogLeNetOutputs:
+        x = self._transform_input(x)
+        x, aux1, aux2, times = self._forward(x)
+        aux_defined = self.training and self.aux_logits
+        if torch.jit.is_scripting():
+            if not aux_defined:
+                warnings.warn("Scripted GoogleNet always returns GoogleNetOutputs Tuple")
+            return sGoogLeNetOutputs(x, aux2, aux1),times
+        else:
+            return self.eager_outputs(x, aux2, aux1),times
 
 
 class Inception(nn.Module):
@@ -262,7 +434,7 @@ class BasicConv2d(nn.Module):
         return F.relu(x, inplace=True)
 
 
-class GoogLeNet_Weights(WeightsEnum):
+class sGoogLeNet_Weights(WeightsEnum):
     IMAGENET1K_V1 = Weights(
         url="https://download.pytorch.org/models/googlenet-1378be20.pth",
         transforms=partial(ImageClassification, crop_size=224),
@@ -286,27 +458,27 @@ class GoogLeNet_Weights(WeightsEnum):
 
 
 @register_model()
-@handle_legacy_interface(weights=("pretrained", GoogLeNet_Weights.IMAGENET1K_V1))
-def googlenet(*, weights: Optional[GoogLeNet_Weights] = None, progress: bool = True, **kwargs: Any) -> GoogLeNet:
-    """GoogLeNet (Inception v1) model architecture from
+@handle_legacy_interface(weights=("pretrained", sGoogLeNet_Weights.IMAGENET1K_V1))
+def sgooglenet(*, weights: Optional[sGoogLeNet_Weights] = None, progress: bool = True, **kwargs: Any) -> sGoogLeNet:
+    """sGoogLeNet (Inception v1) model architecture from
     `Going Deeper with Convolutions <http://arxiv.org/abs/1409.4842>`_.
 
     Args:
-        weights (:class:`~torchvision.models.GoogLeNet_Weights`, optional): The
+        weights (:class:`~torchvision.models.sGoogLeNet_Weights`, optional): The
             pretrained weights for the model. See
-            :class:`~torchvision.models.GoogLeNet_Weights` below for
+            :class:`~torchvision.models.sGoogLeNet_Weights` below for
             more details, and possible values. By default, no pre-trained
             weights are used.
         progress (bool, optional): If True, displays a progress bar of the
             download to stderr. Default is True.
-        **kwargs: parameters passed to the ``torchvision.models.GoogLeNet``
+        **kwargs: parameters passed to the ``torchvision.models.sGoogLeNet``
             base class. Please refer to the `source code
             <https://github.com/pytorch/vision/blob/main/torchvision/models/googlenet.py>`_
             for more details about this class.
-    .. autoclass:: torchvision.models.GoogLeNet_Weights
+    .. autoclass:: torchvision.models.sGoogLeNet_Weights
         :members:
     """
-    weights = GoogLeNet_Weights.verify(weights)
+    weights = sGoogLeNet_Weights.verify(weights)
 
     original_aux_logits = kwargs.get("aux_logits", False)
     if weights is not None:
@@ -316,7 +488,7 @@ def googlenet(*, weights: Optional[GoogLeNet_Weights] = None, progress: bool = T
         _ovewrite_named_param(kwargs, "init_weights", False)
         _ovewrite_named_param(kwargs, "num_classes", len(weights.meta["categories"]))
 
-    model = GoogLeNet(**kwargs)
+    model = sGoogLeNet(**kwargs)
 
     if weights is not None:
         model.load_state_dict(weights.get_state_dict(progress=progress, check_hash=True))
