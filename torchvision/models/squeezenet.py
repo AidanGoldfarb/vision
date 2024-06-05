@@ -36,10 +36,13 @@ class Fire(nn.Module):
 
 
 class SqueezeNet(nn.Module):
-    def __init__(self, timed,sync,cust, version: str = "1_0", num_classes: int = 1000, dropout: float = 0.5) -> None:
+    def __init__(self, timed,sync,cust, comp_arr, version: str = "1_0", num_classes: int = 1000, dropout: float = 0.5) -> None:
         super().__init__()
         _log_api_usage_once(self)
         self.num_classes = num_classes
+        self.timed = timed
+        self.sync = sync
+        self.cust = cust
         if version == "1_0":
             self.features = nn.Sequential(
                 nn.Conv2d(3, 96, kernel_size=7, stride=2),
@@ -72,15 +75,13 @@ class SqueezeNet(nn.Module):
                 Fire(384, 64, 256, 256),
                 Fire(512, 64, 256, 256),
             )
-            if cust:
-                self.featurescomp = nn.Sequential()
-                for i,module in enumerate(self.features):
-                    if i in []: #on va voir
-                        self.featurescomp.add_module("uselessAPI"+str(i+1),torch.compile(module))
-                    else:
-                        self.featurescomp.add_module("uselessAPI"+str(i+1),module)
-                self.features= self.featurescomp
-
+            self.featurescomp = nn.Sequential()
+            for i,module in enumerate(self.features):
+                if i in comp_arr: #on va voir
+                    self.featurescomp.add_module("uselessAPI"+str(i+1),torch.compile(module))
+                else:
+                    self.featurescomp.add_module("uselessAPI"+str(i+1),module)
+            self.features= self.featurescomp
         else:
             # FIXME: Is this needed? SqueezeNet should only be called from the
             # FIXME: squeezenet1_x() functions
@@ -167,14 +168,16 @@ class SqueezeNet(nn.Module):
         torch.cuda.synchronize()
 
         return x,None
-    def _forward_pure(self, x: torch.Tensor) -> torch.Tensor:
-        for module in self.features:
+    def _forward_pure(self, x: torch.Tensor,stop_at_layer) -> torch.Tensor:
+        for i,module in enumerate(self.features):
+            if stop_at_layer and i == stop_at_layer:
+                return
             x = module(x)
         x = self.classifier(x)
         x = torch.flatten(x,1)
         return x,None
     
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, stop_at_layer=None) -> torch.Tensor:
         if self.timed and self.sync:
             return self._forward_timed_sync(x)
         elif self.timed:
@@ -182,11 +185,11 @@ class SqueezeNet(nn.Module):
         elif self.sync:
             return self._forward_sync(x)
         else:
-            return self._forward_pure(x)
+            return self._forward_pure(x,stop_at_layer)
 
 
 def _squeezenet(
-    timed,sync,cust,
+    timed,sync,cust, comp_arr,
     version: str,
     weights: Optional[WeightsEnum],
     progress: bool,
@@ -195,7 +198,7 @@ def _squeezenet(
     if weights is not None:
         _ovewrite_named_param(kwargs, "num_classes", len(weights.meta["categories"]))
 
-    model = SqueezeNet(timed,sync,cust,version, **kwargs)
+    model = SqueezeNet(timed,sync,cust,comp_arr,version, **kwargs)
 
     if weights is not None:
         model.load_state_dict(weights.get_state_dict(progress=progress, check_hash=True))
@@ -284,7 +287,7 @@ def squeezenet1_0(
 @register_model()
 @handle_legacy_interface(weights=("pretrained", SqueezeNet1_1_Weights.IMAGENET1K_V1))
 def squeezenet1_1(
-    timed,sync,cust,*, weights: Optional[SqueezeNet1_1_Weights] = None, progress: bool = True, **kwargs: Any
+    timed,sync,cust,comp_arr,*, weights: Optional[SqueezeNet1_1_Weights] = None, progress: bool = True, **kwargs: Any
 ) -> SqueezeNet:
     """SqueezeNet 1.1 model from the `official SqueezeNet repo
     <https://github.com/DeepScale/SqueezeNet/tree/master/SqueezeNet_v1.1>`_.
@@ -309,4 +312,4 @@ def squeezenet1_1(
         :members:
     """
     weights = SqueezeNet1_1_Weights.verify(weights)
-    return _squeezenet(timed,sync,cust,"1_1", weights, progress, **kwargs)
+    return _squeezenet(timed,sync,cust,comp_arr,"1_1", weights, progress, **kwargs)

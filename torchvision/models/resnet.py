@@ -171,6 +171,7 @@ class ResNet(nn.Module):
         timed,
         sync,
         cust,
+        comp_arr,
         block: Type[Union[BasicBlock, Bottleneck]],
         layers: List[int],
         num_classes: int = 1000,
@@ -202,6 +203,7 @@ class ResNet(nn.Module):
         self.cust = cust
         self.groups = groups
         self.base_width = width_per_group
+        
         self.conv1 = nn.Conv2d(3, self.inplanes, kernel_size=7, stride=2, padding=3, bias=False)
         self.bn1 = norm_layer(self.inplanes)
         self.relu = nn.ReLU(inplace=True)
@@ -210,6 +212,19 @@ class ResNet(nn.Module):
         self.layer2 = self._make_layer(block, 128, layers[1], stride=2, dilate=replace_stride_with_dilation[0])
         self.layer3 = self._make_layer(block, 256, layers[2], stride=2, dilate=replace_stride_with_dilation[1])
         self.layer4 = self._make_layer(block, 512, layers[3], stride=2, dilate=replace_stride_with_dilation[2])
+        
+        self.features = [self.conv1,self.bn1,self.relu,self.maxpool,self.layer1,self.layer2,self.layer3,self.layer4]
+
+
+        self.featurescomp = []
+        for i,module in enumerate(self.features):
+            if i in comp_arr:
+                self.featurescomp.append(torch.compile(module))
+            else:
+                self.featurescomp.append(module)
+        self.features = self.featurescomp
+
+
         if self.cust:
             self.layer1 = torch.compile(self.layer1)
             self.layer2 = torch.compile(self.layer2)
@@ -457,23 +472,12 @@ class ResNet(nn.Module):
 
         return x,None
     
-    def _forward_pure(self, x: Tensor) -> Tensor:
+    def _forward_pure(self, x: Tensor, stop_at_layer=None) -> Tensor:
 
-        x = self.conv1(x)
-
-        x = self.bn1(x)
-       
-        x = self.relu(x)
-
-        x = self.maxpool(x)
-    
-        x = self.layer1(x)
-
-        x = self.layer2(x)
-
-        x = self.layer3(x)
-
-        x = self.layer4(x)
+        for i,module in enumerate(self.features):
+            if stop_at_layer and i == stop_at_layer:
+                return
+            x = module(x)
 
         x = self.avgpool(x)
 
@@ -483,7 +487,7 @@ class ResNet(nn.Module):
 
         return x,None
     
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, x: Tensor, stop_at_layer=None) -> Tensor:
         if self.timed and self.sync:
             return self._forward_timed_sync(x)
         elif self.timed:
@@ -491,13 +495,14 @@ class ResNet(nn.Module):
         elif self.sync:
             return self._forward_sync(x)
         else:
-            return self._forward_pure(x)
+            return self._forward_pure(x,stop_at_layer)
 
 
 def _resnet(
     timed,
     sync,
     cust,
+    comp_arr,
     block: Type[Union[BasicBlock, Bottleneck]],
     layers: List[int],
     weights: Optional[WeightsEnum],
@@ -507,7 +512,7 @@ def _resnet(
     if weights is not None:
         _ovewrite_named_param(kwargs, "num_classes", len(weights.meta["categories"]))
 
-    model = ResNet(timed,sync,cust,block, layers, **kwargs)
+    model = ResNet(timed,sync,cust,comp_arr,block, layers, **kwargs)
 
     if weights is not None:
         model.load_state_dict(weights.get_state_dict(progress=progress, check_hash=True))
@@ -945,7 +950,7 @@ def resnet34(*, weights: Optional[ResNet34_Weights] = None, progress: bool = Tru
 
 @register_model()
 @handle_legacy_interface(weights=("pretrained", ResNet50_Weights.IMAGENET1K_V1))
-def resnet50(timed,sync,cust,*, weights: Optional[ResNet50_Weights] = None, progress: bool = True, **kwargs: Any) -> ResNet:
+def resnet50(timed,sync,cust,comp_arr,*, weights: Optional[ResNet50_Weights] = None, progress: bool = True, **kwargs: Any) -> ResNet:
     """ResNet-50 from `Deep Residual Learning for Image Recognition <https://arxiv.org/abs/1512.03385>`__.
 
     .. note::
@@ -972,7 +977,7 @@ def resnet50(timed,sync,cust,*, weights: Optional[ResNet50_Weights] = None, prog
     """
     weights = ResNet50_Weights.verify(weights)
 
-    return _resnet(timed,sync,cust,Bottleneck, [3, 4, 6, 3], weights, progress, **kwargs)
+    return _resnet(timed,sync,cust,comp_arr,Bottleneck, [3, 4, 6, 3], weights, progress, **kwargs)
 
 
 @register_model()

@@ -69,7 +69,7 @@ class InvertedResidual(nn.Module):
 class MobileNetV2(nn.Module):
     def __init__(
         self,
-        timed, sync, cust,
+        timed, sync, cust, comp_arr,
         num_classes: int = 1000,
         width_mult: float = 1.0,
         inverted_residual_setting: Optional[List[List[int]]] = None,
@@ -147,6 +147,14 @@ class MobileNetV2(nn.Module):
         )
         # make it nn.Sequential
         self.features = nn.Sequential(*features)
+
+        self.featurescomp = nn.Sequential()
+        for i,module in enumerate(self.features):
+            if i in comp_arr:
+                self.featurescomp.add_module("uselessAPI"+str(i+1),torch.compile(module))
+            else:
+                self.featurescomp.add_module("uselessAPI"+str(i+1),module)
+        self.features = self.featurescomp
 
         # building classifier
         self.classifier = nn.Sequential(
@@ -246,8 +254,10 @@ class MobileNetV2(nn.Module):
         
         return x,None
     
-    def _forward_pure(self, x: Tensor) -> Tensor:
-        for module in self.features:
+    def _forward_pure(self, x: Tensor, stop_at_layer=None) -> Tensor:
+        for i,module in enumerate(self.features):
+            if stop_at_layer and i == stop_at_layer:
+                return
             x = module(x)
         # Cannot use "squeeze" as batch-size can be 1
         x = nn.functional.adaptive_avg_pool2d(x, (1, 1))
@@ -256,7 +266,7 @@ class MobileNetV2(nn.Module):
         
         return x, None
 
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, x: Tensor, stop_at_layer=None) -> Tensor:
         if self.timed and self.sync:
             return self._forward_timed_sync(x)
         elif self.timed:
@@ -264,7 +274,7 @@ class MobileNetV2(nn.Module):
         elif self.sync:
             return self._forward_sync(x)
         else:
-            return self._forward_pure(x)
+            return self._forward_pure(x,stop_at_layer)
 
 
 _COMMON_META = {
@@ -319,7 +329,7 @@ class MobileNet_V2_Weights(WeightsEnum):
 @register_model()
 @handle_legacy_interface(weights=("pretrained", MobileNet_V2_Weights.IMAGENET1K_V1))
 def mobilenet_v2(
-    timed,sync,cust,*, weights: Optional[MobileNet_V2_Weights] = None, progress: bool = True, **kwargs: Any
+    timed,sync,cust,comp_arr,*, weights: Optional[MobileNet_V2_Weights] = None, progress: bool = True, **kwargs: Any
 ) -> MobileNetV2:
     """MobileNetV2 architecture from the `MobileNetV2: Inverted Residuals and Linear
     Bottlenecks <https://arxiv.org/abs/1801.04381>`_ paper.
@@ -345,7 +355,7 @@ def mobilenet_v2(
     if weights is not None:
         _ovewrite_named_param(kwargs, "num_classes", len(weights.meta["categories"]))
 
-    model = MobileNetV2(timed,sync,cust,**kwargs)
+    model = MobileNetV2(timed,sync,cust,comp_arr,**kwargs)
 
     if weights is not None:
         model.load_state_dict(weights.get_state_dict(progress=progress, check_hash=True))

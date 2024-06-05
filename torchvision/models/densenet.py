@@ -156,6 +156,7 @@ class DenseNet(nn.Module):
         timed,
         sync,
         cust,
+        comp_arr,
         growth_rate: int = 32,
         block_config: Tuple[int, int, int, int] = (6, 12, 24, 16),
         num_init_features: int = 64,
@@ -208,12 +209,13 @@ class DenseNet(nn.Module):
         if cust:
             self.featurescomp = nn.Sequential()
             for i,module in enumerate(self.features):
-                if i in [4,6]: #lst from god
+                if i in comp_arr:
                     self.featurescomp.add_module("uselessAPI"+str(i+1),torch.compile(module))
                 else:
                     self.featurescomp.add_module("uselessAPI"+str(i+1),module)
             self.features= self.featurescomp
         
+
         # Linear layer
         self.classifier = nn.Linear(num_features, num_classes)
 
@@ -320,8 +322,10 @@ class DenseNet(nn.Module):
         
         return out, None
     
-    def _forward_pure(self, x: Tensor) -> Tensor:
-        for module in self.features:
+    def _forward_pure(self, x: Tensor, stop_at_layer=None) -> Tensor:
+        for i,module in enumerate(self.features):
+            if stop_at_layer and i == stop_at_layer:
+                return
             x = module(x)
         features = x
 
@@ -332,7 +336,7 @@ class DenseNet(nn.Module):
 
         return out, None
 
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, x: Tensor, stop_at_layer=None) -> Tensor:
         if self.timed and self.sync:
             return self._forward_timed_sync(x)
         elif self.timed:
@@ -340,7 +344,7 @@ class DenseNet(nn.Module):
         elif self.sync:
             return self._forward_sync(x)
         else:
-            return self._forward_pure(x)
+            return self._forward_pure(x,stop_at_layer)
 
 
 def _load_state_dict(model: nn.Module, weights: WeightsEnum, progress: bool) -> None:
@@ -366,6 +370,7 @@ def _densenet(
     timed: bool,
     sync: bool,
     cust: bool,
+    comp_arr,
     growth_rate: int,
     block_config: Tuple[int, int, int, int],
     num_init_features: int,
@@ -376,7 +381,7 @@ def _densenet(
     if weights is not None:
         _ovewrite_named_param(kwargs, "num_classes", len(weights.meta["categories"]))
 
-    model = DenseNet(timed,sync,cust,growth_rate, block_config, num_init_features, **kwargs)
+    model = DenseNet(timed,sync,cust,comp_arr,growth_rate, block_config, num_init_features, **kwargs)
 
     if weights is not None:
         _load_state_dict(model=model, weights=weights, progress=progress)
@@ -474,7 +479,7 @@ class DenseNet201_Weights(WeightsEnum):
 
 @register_model()
 @handle_legacy_interface(weights=("pretrained", DenseNet121_Weights.IMAGENET1K_V1))
-def densenet121(timed,sync,cust,*, weights: Optional[DenseNet121_Weights] = None, progress: bool = True, **kwargs: Any) -> DenseNet:
+def densenet121(timed,sync,cust,comp_arr,*, weights: Optional[DenseNet121_Weights] = None, progress: bool = True, **kwargs: Any) -> DenseNet:
     r"""Densenet-121 model from
     `Densely Connected Convolutional Networks <https://arxiv.org/abs/1608.06993>`_.
 
@@ -495,7 +500,7 @@ def densenet121(timed,sync,cust,*, weights: Optional[DenseNet121_Weights] = None
     """
     weights = DenseNet121_Weights.verify(weights)
 
-    return _densenet(timed,sync,cust,32, (6, 12, 24, 16), 64, weights, progress, **kwargs)
+    return _densenet(timed,sync,cust,comp_arr,32, (6, 12, 24, 16), 64, weights, progress, **kwargs)
 
 
 @register_model()

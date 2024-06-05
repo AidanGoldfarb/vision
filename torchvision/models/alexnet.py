@@ -16,8 +16,11 @@ __all__ = ["AlexNet", "AlexNet_Weights", "alexnet"]
 
 
 class AlexNet(nn.Module):
-    def __init__(self, timed,sync,cust, num_classes: int = 1000, dropout: float = 0.5) -> None:
+    def __init__(self, timed,sync,cust,comp_arr, num_classes: int = 1000, dropout: float = 0.5) -> None:
         super().__init__()
+        self.timed = timed
+        self.sync = sync
+        self.cust = cust
         _log_api_usage_once(self)
         self.features = nn.Sequential(
             nn.Conv2d(3, 64, kernel_size=11, stride=4, padding=2),
@@ -34,6 +37,15 @@ class AlexNet(nn.Module):
             nn.ReLU(inplace=True),
             nn.MaxPool2d(kernel_size=3, stride=2),
         )
+        # self.features = nn.Sequential()
+        self.featurescomp = nn.Sequential()
+        for i,module in enumerate(self.features):
+            if i in comp_arr:
+                self.featurescomp.add_module("uselessAPI"+str(i+1),torch.compile(module))
+            else:
+                self.featurescomp.add_module("uselessAPI"+str(i+1),module)
+        self.features = self.featurescomp
+
         self.avgpool = nn.AdaptiveAvgPool2d((6, 6))
         self.classifier = nn.Sequential(
             nn.Dropout(p=dropout),
@@ -45,6 +57,7 @@ class AlexNet(nn.Module):
             nn.Linear(4096, num_classes),
         )
 
+    
 
     def _forward_timed(self, x: torch.Tensor) -> torch.Tensor:
         times = []
@@ -121,8 +134,10 @@ class AlexNet(nn.Module):
 
         return x,None
     
-    def _forward_pure(self, x: torch.Tensor) -> torch.Tensor:
-        for module in self.features:
+    def _forward_pure(self, x: torch.Tensor,stop_at_layer=None) -> torch.Tensor:
+        for i,module in enumerate(self.features):
+            if stop_at_layer and i == stop_at_layer:
+                return
             x = module(x)
         x = self.avgpool(x)
         x = torch.flatten(x, 1)
@@ -130,15 +145,15 @@ class AlexNet(nn.Module):
 
         return x,None
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor: 
+    def forward(self, x: torch.Tensor, stop_at_layer=None) -> torch.Tensor: 
         if self.timed and self.sync:
-                return self._forward_timed_sync(x)
+            return self._forward_timed_sync(x)
         elif self.timed:
             return self._forward_timed(x)
         elif self.sync:
             return self._forward_sync(x)
         else:
-            return self._forward_pure(x)
+            return self._forward_pure(x,stop_at_layer)
 
 class AlexNet_Weights(WeightsEnum):
     IMAGENET1K_V1 = Weights(
@@ -167,7 +182,7 @@ class AlexNet_Weights(WeightsEnum):
 
 @register_model()
 @handle_legacy_interface(weights=("pretrained", AlexNet_Weights.IMAGENET1K_V1))
-def alexnet(timed,sync,cust,*, weights: Optional[AlexNet_Weights] = None, progress: bool = True, **kwargs: Any) -> AlexNet:
+def alexnet(timed,sync,cust,comp_arr,*, weights: Optional[AlexNet_Weights] = None, progress: bool = True, **kwargs: Any) -> AlexNet:
     """AlexNet model architecture from `One weird trick for parallelizing convolutional neural networks <https://arxiv.org/abs/1404.5997>`__.
 
     .. note::
@@ -199,7 +214,7 @@ def alexnet(timed,sync,cust,*, weights: Optional[AlexNet_Weights] = None, progre
     if weights is not None:
         _ovewrite_named_param(kwargs, "num_classes", len(weights.meta["categories"]))
 
-    model = AlexNet(timed,sync,cust,**kwargs)
+    model = AlexNet(timed,sync,cust,comp_arr,**kwargs)
     if weights is not None:
         model.load_state_dict(weights.get_state_dict(progress=progress, check_hash=True))
 

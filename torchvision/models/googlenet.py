@@ -36,6 +36,7 @@ class GoogLeNet(nn.Module):
         timed,
         sync,
         cust,
+        comp_arr,
         num_classes: int = 1000,
         aux_logits: bool = True,
         transform_input: bool = False,
@@ -46,6 +47,9 @@ class GoogLeNet(nn.Module):
     ) -> None:
         super().__init__()
         _log_api_usage_once(self)
+        self.timed = timed
+        self.sync = sync
+        self.cust = cust
         if blocks is None:
             blocks = [BasicConv2d, Inception, InceptionAux]
         if init_weights is None:
@@ -89,15 +93,14 @@ class GoogLeNet(nn.Module):
             self.inception3b,self.maxpool3,self.inception4a,self.inception4b,self.inception4c,self.inception4d,self.inception4e,
             self.maxpool4,self.inception5a,self.inception5b]
 
-
-        if cust:
-            self.layerscomp = []
-            for i,layer in enumerate(self.layers):
-                if i in [5,6,8,9,10,11,12,14,15]: #lst from god
-                    self.layerscomp.append(torch.compile(layer))
-                else:
-                    self.layerscomp.append(layer)
-            self.layers = self.layerscomp
+        
+        self.layerscomp = []
+        for i,layer in enumerate(self.layers):
+            if i in comp_arr: 
+                self.layerscomp.append(torch.compile(layer))
+            else:
+                self.layerscomp.append(layer)
+        self.layers = self.layerscomp
 
 
         if aux_logits:
@@ -129,35 +132,37 @@ class GoogLeNet(nn.Module):
 
     def _forward_timed_sync(self, x: Tensor) -> Tuple[Tensor, Optional[Tensor], Optional[Tensor]]:
         times = []
-        for layer in self.layerscomp:
+        for layer in self.layers:
             st = time.perf_counter_ns()
             x = layer(x)
             torch.cuda.synchronize()
             et = time.perf_counter_ns()
             times.append(et-st)
-        return x, None, None, times
+        return x, times
 
     def _forward_timed(self, x: Tensor) -> Tuple[Tensor, Optional[Tensor], Optional[Tensor]]:
         times = []
-        for layer in self.layerscomp:
+        for layer in self.layers:
             st = time.perf_counter_ns()
             x = layer(x)
             et = time.perf_counter_ns()
             times.append(et-st)
-        return x, None, None, times
+        return x, times
 
     def _forward_sync(self, x: Tensor) -> Tuple[Tensor, Optional[Tensor], Optional[Tensor]]:
-        for layer in self.layerscomp:
+        for layer in self.layers:
             x = layer(x)
             torch.cuda.synchronize()
-        return x, None, None, None 
+        return x, None 
 
-    def _forward_pure(self, x: Tensor) -> Tuple[Tensor, Optional[Tensor], Optional[Tensor]]:
-        for layer in self.layerscomp:
+    def _forward_pure(self, x: Tensor, stop_at_layer) -> Tuple[Tensor, Optional[Tensor], Optional[Tensor]]:
+        for i,layer in enumerate(self.layers):
+            if stop_at_layer and i == stop_at_layer:
+                return
             x = layer(x)
-        return x, None, None, None 
+        return x, None 
 
-    def _forward(self, x: Tensor) -> Tuple[Tensor, Optional[Tensor], Optional[Tensor]]:
+    def forward(self, x: Tensor, stop_at_layer=None) -> Tuple[Tensor, Optional[Tensor], Optional[Tensor]]:
         if self.timed and self.sync:
             return self._forward_timed_sync(x)
         elif self.timed:
@@ -165,7 +170,7 @@ class GoogLeNet(nn.Module):
         elif self.sync:
             return self._forward_sync(x)
         else:
-            return self._forward_pure(x)
+            return self._forward_pure(x,stop_at_layer)
 
 
 class Inception(nn.Module):
